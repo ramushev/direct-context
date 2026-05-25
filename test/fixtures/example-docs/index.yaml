@@ -1,0 +1,33 @@
+title: shopcart
+version: 0.1.0
+generated_at: 2026-01-01T00:00:00Z
+tags: [example, demo]
+files:
+  - id: overview
+    path: overview.md
+    kind: overview
+    tags: [orientation]
+  - id: architecture
+    path: architecture.md
+    kind: architecture
+    tags: [architecture]
+  - id: modules/auth
+    path: modules/auth.md
+    kind: module
+    tags: [auth]
+  - id: modules/billing
+    path: modules/billing.md
+    kind: module
+    tags: [billing, payments]
+  - id: flows/checkout
+    path: flows/checkout.md
+    kind: flow
+    tags: [checkout]
+  - id: apis/rest
+    path: apis/rest.md
+    kind: api
+    tags: [rest, api]
+  - id: glossary
+    path: glossary.md
+    kind: glossary
+    tags: [glossary]

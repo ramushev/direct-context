@@ -1,0 +1,51 @@
+{
+  "name": "direct-context",
+  "version": "0.1.0",
+  "description": "MCP server that exposes a direct-context as searchable tools and prompts.",
+  "author": "Eduard Ramushev",
+  "type": "module",
+  "bin": {
+    "direct-context-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "prompts",
+    "example",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "start:http": "node dist/index.js --transport http",
+    "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/index.ts --transport http",
+    "ctx:load": "tsx src/load.ts",
+"inspect": "npx @modelcontextprotocol/inspector tsx src/index.ts",
+    "inspect:http": "npx @modelcontextprotocol/inspector -- node dist/index.js --transport http",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.7.6",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "gray-matter": "^4.0.3",
+    "highlight.js": "^11.11.1",
+    "marked": "^18.0.3",
+    "minisearch": "^7.2.0",
+    "yaml": "^2.7.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^0.21.2",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}

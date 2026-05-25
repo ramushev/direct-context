@@ -1,0 +1,13 @@
+node_modules
+dist
+*.tsbuildinfo
+.claude
+.env
+.env.local
+.cache
+repos-context
+.transformers-cache
+coverage
+.DS_Store
+context.config.json
+!context.config.example.json

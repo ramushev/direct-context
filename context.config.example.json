@@ -1,0 +1,7 @@
+{
+  "repos": [
+    "/absolute/path/to/some-local-repo",
+    "owner/some-github-repo",
+    "owner/some-github-repo@main"
+  ]
+}

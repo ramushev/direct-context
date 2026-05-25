@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest";
+import { loadDocs } from "../src/loader.js";
+import { Bm25Backend } from "../src/search/bm25.js";
+import { TextBackend } from "../src/search/text.js";
+import { EXAMPLE_DOCS_DIR } from "./helpers.js";
+
+describe("text engine", () => {
+  it("finds Stripe references by substring match", async () => {
+    const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
+    const engine = new TextBackend();
+    await engine.init(loaded.docs);
+
+    const hits = await engine.query("Stripe", 5);
+    expect(hits.length).toBeGreaterThan(0);
+    const ids = hits.map((h) => h.id);
+    expect(ids).toContain("modules/billing");
+  });
+
+  it("returns no hits for an unknown term", async () => {
+    const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
+    const engine = new TextBackend();
+    await engine.init(loaded.docs);
+
+    const hits = await engine.query("zzzznonexistentzzz", 5);
+    expect(hits).toEqual([]);
+  });
+
+  it("ranks the most-relevant doc first", async () => {
+    const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
+    const engine = new TextBackend();
+    await engine.init(loaded.docs);
+
+    const hits = await engine.query("checkout", 5);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]?.id).toBeDefined();
+    const top = hits[0]?.id ?? "";
+    expect(["flows/checkout", "apis/rest"]).toContain(top);
+  });
+});
+
+describe("bm25 engine", () => {
+  it("finds JWT-related docs via fuzzy match", async () => {
+    const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
+    const engine = new Bm25Backend();
+    await engine.init(loaded.docs);
+
+    const hits = await engine.query("jwt session", 5);
+    expect(hits.length).toBeGreaterThan(0);
+    const ids = hits.map((h) => h.id);
+    expect(ids).toContain("modules/auth");
+  });
+
+  it("returns the right doc for a payment query", async () => {
+    const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
+    const engine = new Bm25Backend();
+    await engine.init(loaded.docs);
+
+    const hits = await engine.query("payment intent", 5);
+    expect(hits.length).toBeGreaterThan(0);
+    const ids = hits.map((h) => h.id);
+    expect(ids).toContain("modules/billing");
+  });
+});

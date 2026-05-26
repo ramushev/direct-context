@@ -188,9 +188,9 @@ export async function listDirectory(
 
 export const makeListDirectoryTool = (roots: readonly SourceRoot[]) =>
   ({
-    name: "list_directory",
+    name: "list_source_dir",
     config: {
-      title: "List directory",
+      title: "List source directory",
       description:
         "List files and subdirectories inside a directory in a configured source root. " +
         "Use this when a code_ref points to a folder rather than a specific file. " +

@@ -18,7 +18,7 @@ export const makeGetPromptTool = (prompts: CollectPrompt[]) =>
       description:
         "Return the full body and metadata of a documentation collect prompt by its id " +
         "(e.g. '01-architecture'). Use this to fetch the authoritative spec for a phase " +
-        "before executing it. Call list_prompts to discover available ids.",
+        "before executing it.",
       inputSchema: {
         id: z.string().min(1).describe("The prompt id, e.g. '01-architecture'."),
       },

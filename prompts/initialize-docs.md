@@ -95,7 +95,7 @@ before launching wave 2.
 | 2 | Architecture  | `01-architecture` | (none)    | `agent-docs/architecture.md`    |
 | 3 | Glossary      | `06-glossary`     | (none)    | `agent-docs/glossary.md`        |
 
-### Wave 1.5 — phase relevance check (orchestrator)
+### Wave 2 — phase relevance check (orchestrator)
 
 Not every repo needs every doc. Before assembling bundles or dispatching
 fan-out, inspect what wave 1 produced and prune phases whose underlying
@@ -160,7 +160,7 @@ prune auditable when the user re-runs across many repos.
 The skip list also gates wave 2: if `04-apis` is skipped, do not enumerate
 API surfaces or spawn per-API sub-agents at all.
 
-### Wave 1.7 — shared context bundle (orchestrator, one-shot)
+### Wave 3 — shared context bundle (orchestrator, one-shot)
 
 Bundle contents, in this exact order:
 
@@ -185,7 +185,7 @@ Within a single phase, items 1-3 are identical across all sub-agents and
 item 4 is identical across all items in that phase — so you pay full price for
 the first sub-agent in each phase and hit the cache for the rest.
 
-### Wave 2 — fan-out (parallel, capped by `$PARALLEL_SUBAGENTS`)
+### Wave 4 — fan-out (parallel, capped by `$PARALLEL_SUBAGENTS`)
 
 From the **component table** in `architecture.md`, derive:
 
@@ -206,7 +206,7 @@ Then spawn one sub-agent per item:
 | Business logic  | `08-business-logic`  | domain area (or one)   | `agent-docs/business-logic.md`    |
 | Integrations    | `09-integrations`    | integration (or one)   | `agent-docs/integrations.md`      |
 
-### Wave 3 — system-wide docs (parallel)
+### Wave 5 — system-wide docs (parallel)
 
 No fan-out — one sub-agent per phase.
 

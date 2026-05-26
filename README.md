@@ -262,7 +262,7 @@ The `read_source_file` tool is gated on at least one configured source root. Roo
 | `get_prompt`          | `{ id }`                       | `{ id, description, body, args, sources }`                           |
 | `list_source_roots`*  | (none)                         | `{ count, roots: [{ name }] }`                                       |
 | `read_source_file`*   | `{ repo, path, max_bytes? }`   | `{ repo, path, bytes, truncated, content }`                          |
-| `list_directory`*     | `{ repo, path }`               | `{ repo, path, entries: [{ name, path, type }] }`                    |
+| `list_source_dir`*    | `{ repo, path }`               | `{ repo, path, entries: [{ name, path, type }] }`                    |
 
 \* Registered only when at least one source root is configured.
 

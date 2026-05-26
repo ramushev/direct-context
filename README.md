@@ -85,7 +85,7 @@ Each repo you want to serve needs an `agent-docs/` folder — markdown files wit
 **Recommended: the `initialize-docs` orchestrator.** The fastest path is the one-shot orchestrator at [prompts/initialize-docs.md](prompts/initialize-docs.md). Open the target repo in an agentic editor (Claude Code, Cursor, etc.) that can spawn sub-agents, then run the orchestrator prompt. It:
 
 1. Discovers the repo's modules, flows, APIs, and integrations.
-2. Spawns one sub-agent per documentation phase — and one sub-agent per module / flow / API surface — in three waves (foundations → fan-out → system-wide).
+2. Spawns one sub-agent per documentation phase — and one sub-agent per module / flow / API surface — in five waves (foundations → relevance prune → shared-bundle assembly → fan-out → system-wide). Waves 1, 4, and 5 produce docs; 2 and 3 are orchestrator-only setup.
 3. Each sub-agent reads its own authoritative spec from `prompts/<id>.md` and writes a single markdown file.
 4. The orchestrator writes a minimal `AGENTS.md` pointer at the repo root and validates cross-doc wiki-links.
 
@@ -93,7 +93,7 @@ Args you can pass to the orchestrator:
 
 | Arg                  | Meaning                                                  |
 |----------------------|----------------------------------------------------------|
-| `PARALLEL_SUBAGENTS` | Cap on concurrent sub-agents in waves 2 & 3 (default 4). |
+| `PARALLEL_SUBAGENTS` | Cap on concurrent sub-agents in waves 4 & 5 (default 4). |
 | `SKIP_PHASES`        | Comma-separated prompt IDs to skip (e.g. `13-frontend`). |
 
 **Manual: run individual prompts.** The orchestrator is built on 18 individual prompts under [prompts/](prompts/). Each prompt produces exactly one doc and can be run on its own — useful for partial coverage, re-runs after code changes, or generating a missing doc. They're organized in three tiers:
@@ -302,7 +302,7 @@ sequenceDiagram
     Editor->>Orch: Execute orchestrator
     Orch->>Repo: Discover modules, flows, APIs
     Repo-->>Orch: Repo structure
-    loop per doc — waves 1 → 2 → 3
+    loop per doc — waves 1 → 4 → 5 (2 & 3 are orchestrator-only setup)
         Orch->>Sub: Spawn with prompt ID + args
         Sub->>Repo: Read source files
         Repo-->>Sub: Source content

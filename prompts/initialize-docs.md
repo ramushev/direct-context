@@ -12,7 +12,7 @@ sources:
   - id: architecture
     relation: drilldown
     path: architecture.md
-    description: "produced by the architecture sub-agent; drives wave-2 fan-out"
+    description: "produced by the architecture sub-agent; drives wave-4 fan-out"
   - id: modules
     relation: drilldown
     path: modules/
@@ -27,10 +27,10 @@ sources:
     description: "one sub-agent per API surface"
 args:
   PARALLEL_SUBAGENTS:
-    description: "Max sub-agents to run concurrently in waves 2 and 3 (default: 4)."
+    description: "Max sub-agents to run concurrently in waves 4 and 5 (default: 4)."
     required: false
   SUBAGENT_MODEL:
-    description: "Model for wave-2 and wave-3 sub-agents (default: claude-sonnet-4-6). Per-item docs are mechanical once architecture is fixed and don't need the orchestrator's reasoning depth. Wave 1 stays on the orchestrator's model."
+    description: "Model for wave-4 and wave-5 sub-agents (default: claude-sonnet-4-6). Per-item docs are mechanical once architecture is fixed and don't need the orchestrator's reasoning depth. Wave 1 stays on the orchestrator's model."
     required: false
   SKIP_PHASES:
     description: "Comma-separated prompt IDs to force-skip on top of auto-detected skips (see 'Phase relevance check'). E.g. '10-permissions' to drop authz docs even though authz code exists."
@@ -74,15 +74,54 @@ Every sub-agent's brief must include:
 - Any per-item variables it needs (`MODULE_NAME`, `FLOW_NAME`, etc.) — placed
   AFTER the bundle.
 
-**Model selection.** Dispatch wave-2 and wave-3 sub-agents on
+**Model selection.** Dispatch wave-4 and wave-5 sub-agents on
 `$SUBAGENT_MODEL` (default: `claude-sonnet-4-6`). Wave-1 sub-agents
 (orientation, architecture, glossary) drive every later decision, so keep them
 on the orchestrator's parent model. This alone typically cuts per-item cost
 3-5× without quality loss on mechanical per-module / per-flow / per-API docs.
 
+## Source of truth — read code, not prior docs
+
+The input to this run is the **repo's source code**, read directly through the
+editor's native filesystem tools. Do **not** ingest previously-generated docs
+for the same repo as input — neither the on-disk `agent-docs/` from a past
+run nor the same repo's docs served through the `direct-context` MCP server.
+Doing so launders stale output back in as input and stops the regeneration
+from picking up code changes.
+
+**Direct-context tools the orchestrator must call:**
+
+- `get_prompt({ id: "<phase-id>" })` — resolves each phase's authoritative
+  spec. Call it **once per kept phase** (after Wave 2's relevance check) and
+  embed the returned body inline in the shared bundle (see Wave 3). This is
+  the canonical way to fetch phase specs; do not paste prompt files from disk.
+
+**Direct-context tools the orchestrator must NOT call against the open repo:**
+
+- `search_agent_docs`, `get_agent_doc`, `list_agent_docs`,
+  `outline_agent_docs` — they return whatever was last ingested by
+  `pnpm ctx:load`, by definition older than the code you're about to
+  re-describe.
+- `read_source_file` — read the code with the editor's native file tools
+  (Read / Glob / Grep). They're faster and don't go through the MCP sandbox.
+
+**Also do not:**
+
+- Pre-read `agent-docs/*.md` from the open repo to "seed" any sub-agent's
+  brief. The only docs that enter a sub-agent brief are the wave-1 outputs
+  produced **earlier in this same run**.
+- Treat any earlier `agent-docs/` content as authoritative. If `agent-docs/`
+  already exists in the open repo, it will be overwritten — detecting it is
+  useful only for the `AGENTS.md` already-exists check in Assembly.
+
+Calls against a **different** repo (a known dependency or sibling) are fine.
+The stale-input problem only applies to the repo currently being regenerated.
+
 ## Phase plan
 
-Run phases in three waves so later sub-agents have prerequisites to link into.
+Run in five waves so later sub-agents have prerequisites to link into. Waves
+1, 4, and 5 produce documents; waves 2 and 3 are orchestrator-only setup
+(relevance pruning and shared-bundle assembly) and emit no docs themselves.
 
 ### Wave 1 — foundations (serial)
 
@@ -157,7 +196,7 @@ Each skipped phase must show its reason: `auto: <signal that failed>`,
 `$SKIP_PHASES`, or `auto-skipped, kept via $FORCE_PHASES`. This makes the
 prune auditable when the user re-runs across many repos.
 
-The skip list also gates wave 2: if `04-apis` is skipped, do not enumerate
+The skip list also gates wave 4: if `04-apis` is skipped, do not enumerate
 API surfaces or spawn per-API sub-agents at all.
 
 ### Wave 3 — shared context bundle (orchestrator, one-shot)
@@ -353,6 +392,21 @@ read_source_file({ repo, path }). Do not invent fields.
 <inline: full body returned by get_prompt({ id: "<prompt-id>" }), resolved
 once by the orchestrator. Do NOT call get_prompt from inside this sub-agent —
 that defeats the cached prefix.>
+
+## Tool rules
+
+Read the repo's source code directly through native editor file tools
+(Read / Glob / Grep). Do NOT call the `direct-context` MCP server for any
+purpose:
+
+  - No `search_agent_docs`, `get_agent_doc`, `list_agent_docs`,
+    `outline_agent_docs` — they return last-ingested (stale) docs.
+  - No `read_source_file` — use native Read instead.
+  - No `get_prompt` — the phase spec above is the one and only source.
+
+If `agent-docs/<your output path>` already exists, overwrite it without
+reading the prior version. The wave-1 outputs above are the only "previous
+docs" you may rely on, and they are from this same run.
 
 === --- PER-ITEM --- (this section varies per sub-agent) ===
 

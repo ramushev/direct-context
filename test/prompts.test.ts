@@ -53,9 +53,12 @@ describe("loadCollectPrompts (built-in prompts)", () => {
     }
   });
 
-  it("instructs every prompt to emit a code_refs: block for read_source_file", async () => {
+  it("instructs every phase prompt to emit a code_refs: block for read_source_file", async () => {
     const prompts = await loadCollectPrompts(PROMPTS_DIR);
-    for (const p of prompts) {
+    // Skip the orchestrator — it drives the phase prompts and doesn't itself
+    // emit a doc, so it doesn't carry a literal `code_refs:` YAML block.
+    const phasePrompts = prompts.filter((p) => p.name !== "initialize-docs");
+    for (const p of phasePrompts) {
       expect(p.body, `prompt ${p.name} should mention code_refs:`).toContain(
         "code_refs:",
       );

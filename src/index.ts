@@ -23,7 +23,7 @@ if (config.sourceRoots.length > 0) {
 } else if (docs.docs.length > 0) {
   log(
     "no source roots configured — read_source_file is NOT exposed.\n" +
-      "[direct-context-mcp]   re-run `pnpm context:load` from a local path to auto-register one,\n" +
+      "[direct-context-mcp]   re-run `pnpm ctx:load` from a local path to auto-register one,\n" +
       "[direct-context-mcp]   or pass --source-root /path/to/repo when starting the server.",
   );
 }

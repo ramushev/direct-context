@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadDocs } from "../src/loader.js";
-import { BackendRegistry } from "../src/search/index.js";
+import { EngineRegistry } from "../src/search/index.js";
 import { makeGetDocTool } from "../src/tools/getDoc.js";
 import { makeListDocsTool } from "../src/tools/listDocs.js";
 import { makeOutlineTool } from "../src/tools/outline.js";
@@ -63,7 +63,7 @@ describe("get_agent_doc tool", () => {
 describe("search_agent_docs tool", () => {
   it("delegates to the requested engine and returns hits", async () => {
     const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
-    const registry = new BackendRegistry();
+    const registry = new EngineRegistry();
     registry.setDocs(loaded.docs);
 
     const tool = makeSearchDocsTool(registry, "bm25");
@@ -82,7 +82,7 @@ describe("search_agent_docs tool", () => {
 
   it("uses an explicit engine override when provided", async () => {
     const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
-    const registry = new BackendRegistry();
+    const registry = new EngineRegistry();
     registry.setDocs(loaded.docs);
 
     const tool = makeSearchDocsTool(registry, "bm25");

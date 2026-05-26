@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadDocs } from "../src/loader.js";
-import { SemanticBackend } from "../src/search/semantic.js";
+import { SemanticEngine } from "../src/search/semantic.js";
 import { EXAMPLE_DOCS_DIR } from "./helpers.js";
 
 // The semantic engine downloads a ~100MB model on first run, so it is
@@ -13,7 +13,7 @@ maybeDescribe("semantic engine", () => {
     "ranks the auth module highest for a token-related query",
     async () => {
       const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
-      const engine = new SemanticBackend();
+      const engine = new SemanticEngine();
       await engine.init(loaded.docs);
 
       const hits = await engine.query("how are tokens validated", 5);

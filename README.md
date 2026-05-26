@@ -24,6 +24,8 @@
 pnpm install   # requires Node ≥ 20
 ```
 
+> Remote repos (GitHub / Bitbucket) are cloned over SSH — `ssh-add` your key first if you want to serve any.
+
 ### Step 2 — Generate docs for a target repo
 
 Open the target repo in an agentic editor (Claude Code, Cursor, etc.) and run the one-shot orchestrator prompt:
@@ -70,6 +72,8 @@ pnpm dev:http   # HTTP on :3050
 
 Add the server to your editor's MCP config (Cursor, Claude Desktop, etc.). See [Client configuration](#client-configuration) below for the exact snippet.
 
+> **After editing docs**, re-run `pnpm ctx:load` and restart the server. Docs and embeddings are loaded once at startup — there is no hot-reload.
+
 ---
 
 ## Usage
@@ -92,7 +96,7 @@ Args you can pass to the orchestrator:
 | `PARALLEL_SUBAGENTS` | Cap on concurrent sub-agents in waves 2 & 3 (default 4). |
 | `SKIP_PHASES`        | Comma-separated prompt IDs to skip (e.g. `13-frontend`). |
 
-**Manual: run individual prompts.** The orchestrator is built on 17 individual prompts under [prompts/](prompts/). Each prompt produces exactly one doc and can be run on its own — useful for partial coverage, re-runs after code changes, or generating a missing doc. They're organized in three tiers:
+**Manual: run individual prompts.** The orchestrator is built on 18 individual prompts under [prompts/](prompts/). Each prompt produces exactly one doc and can be run on its own — useful for partial coverage, re-runs after code changes, or generating a missing doc. They're organized in three tiers:
 
 - **Understand the system (00–06)** — orientation, architecture, per-module deep-dives, data flows, APIs, runtime behavior, glossary.
 - **Know the domain (07–12)** — data model, business logic, integrations, permissions, events, errors.
@@ -162,6 +166,8 @@ Remote clones are kept under `.cache/repos/` and reused across loads — subsequ
 
 Each repo's `agent-docs/` folder must exist before loading — the loader exits with an error otherwise. Generate it first (step 1).
 
+**Repo names must be unique.** Each repo is identified by the basename of its path (local) or the `repo` portion of its ref (remote). If two entries resolve to the same name (e.g. `/work/foo` and `other-owner/foo`), `ctx:load` fails — rename one of the checkouts or drop one entry.
+
 ### 3. Run the server
 
 ```bash
@@ -196,6 +202,8 @@ The server reads from `.cache/ctx/` by default. Override with `--docs <path>` or
 }
 ```
 
+`.cache/` is resolved relative to the package itself (not the client's working directory), so the client doesn't need a `cwd`. If you want to keep the cache elsewhere, pass `--docs /abs/path` or set `AGENT_DOCS_DIR`.
+
 ### HTTP
 
 Start the server:
@@ -216,14 +224,6 @@ Then point your client at it:
 }
 ```
 
-Smoke-test with curl:
-
-```bash
-curl -s -X POST http://localhost:3050/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq
-```
-
 ## Configuration reference
 
 | Flag             | Env var               | Default       | Notes                                                                                                  |
@@ -234,29 +234,12 @@ curl -s -X POST http://localhost:3050/ \
 | `--port`         | `CONTEXT_PORT`        | `3050`        | Port for HTTP transport. Ignored when transport is `stdio`.                                            |
 | `--source-root`  | `AGENT_SOURCE_ROOTS`  | (none)        | Source-code root the `read_source_file` tool may read from. Repeatable flag; env var is comma-separated. |
 
-`pnpm ctx:load` takes no flags — its input is `context.config.json`.
-
-### Default docs directory resolution
-
-1. `--docs` flag or `AGENT_DOCS_DIR` env var (explicit override).
-2. `.cache` inside the package root — `pnpm ctx:load` writes `.cache/ctx.yaml` there, which the server reads on startup.
-
-### How source roots are resolved
-
-The `read_source_file` tool is gated on at least one configured source root. Roots come from three places (any combination):
-
-1. `--source-root /path/to/repo` CLI flag (repeatable).
-2. `AGENT_SOURCE_ROOTS=/path1,/path2` env var.
-3. **Auto-discovered** from `.cache/ctx.yaml` — `pnpm ctx:load` writes a `source_roots:` map into the merged manifest (the original checkout path for local sources, the `.cache/repos/` clone path for git sources). The server reads this on startup and registers them automatically — no `--source-root` flag needed after a local load.
-
-`repo` is the basename of the source root. Paths are resolved under that root and rejected if they try to escape it.
-
 ## MCP tools
 
 | Tool                  | Input                          | Output                                                               |
 |-----------------------|--------------------------------|----------------------------------------------------------------------|
 | `list_agent_docs`     | (none)                         | `{ count, docs: [{ id, title, kind, tags, path }] }`                 |
-| `get_agent_doc`       | `{ id }`                       | `{ id, title, kind, tags, path, frontmatter, body }`                 |
+| `get_agent_doc`       | `{ id }`                       | `{ id, title, kind, tags, path, code_refs, frontmatter, body }`      |
 | `search_agent_docs`   | `{ query, k?, engine? }`       | `{ engine, query, hits: [{ id, title, score, snippet }] }`           |
 | `outline_agent_docs`  | (none)                         | `{ tree: OutlineNode[] }`                                            |
 | `get_prompt`          | `{ id }`                       | `{ id, description, body, args, sources }`                           |
@@ -297,7 +280,7 @@ Each prompt's frontmatter declares `args` for any `$VAR` / `${VAR}` tokens it re
 |------------|------------------------------------------------------------------------------------------------|----------------------------------------------------|------------------------------------------------------------|
 | `text`     | substring + tag/title boost                                                                    | zero deps, instant startup, predictable            | exact-match only, no stemming, no semantic recall          |
 | `bm25`     | [minisearch](https://lucaong.github.io/minisearch/) (BM25, fuzzy, prefix)                      | strong default for keyword-style queries; no model | still keyword-based                                        |
-| `semantic` | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) MiniLM-L6, in-process | conceptual recall ("how do tokens get validated")  | first run downloads ~100MB model; embeds all docs at start |
+| `semantic` | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) MiniLM-L6, in-process | conceptual recall ("how do tokens get validated")  | first run downloads the model (cached under `.transformers-cache`); embeds all docs at start |
 
 The semantic engine is initialized lazily on first query, so startup stays snappy if you never use it.
 
@@ -414,7 +397,7 @@ agent-docs/
 ├── data-model.md       # optional: entities, schemas, migrations
 ├── permissions.md      # optional: authn/authz, roles, scopes
 ├── integrations.md     # optional: external service contracts
-├── configuration.md    # optional: env vars, config files, feature flags
+├── runtime-behavior.md # optional: env vars, config files, feature flags (kind: configuration)
 ├── jobs.md             # optional: async work, cron, queues
 ├── events.md           # optional: message contracts, topics
 ├── errors.md           # optional: error taxonomy, resilience
@@ -452,7 +435,7 @@ Each `.md` file is a plain Markdown document with a top-level heading:
 |---------|-------------------------------------------------------------------------------|
 | `id`    | Path relative to the docs root, with the `.md` extension stripped.            |
 | `title` | First `# ` heading in the body. Falls back to `id`.                           |
-| `kind`  | Path: `modules/` → `module`, `flows/` → `flow`, `apis/` → `api`. Otherwise the basename — `overview`, `architecture`, `glossary`, `data-model`, `business-logic`, etc. — is matched to a `DocKind`. `runtime-behavior` maps to `configuration`. Unrecognized basenames fall back to `note`. |
+| `kind`  | Path: `modules/` → `module`, `flows/` → `flow`, `apis/` → `api`. Otherwise the basename is matched to a `DocKind` from the table below — `overview`, `architecture`, `glossary`, etc. The filename `runtime-behavior.md` is aliased to `kind: configuration`. Unrecognized basenames fall back to `note`. |
 | `tags`  | Empty unless overridden by frontmatter.                                       |
 
 YAML frontmatter is optional. When present, its `id`, `title`, `kind`, and `tags` override the inferred values; any other keys are preserved on the loaded doc:

@@ -75,7 +75,7 @@ function getFlag(argv: readonly string[], flag: string): string | undefined {
  *
  * Default docsDir resolution order:
  *   1. --docs flag or AGENT_DOCS_DIR env var (explicit override)
- *   2. .cache/ctx/ inside the package root (populated by `pnpm ctx:load`)
+ *   2. .cache/ inside the package root (populated by `pnpm ctx:load`)
  */
 export function parseConfig(
   argv: readonly string[] = process.argv.slice(2),
@@ -220,25 +220,29 @@ function discoverManifestSourceRoots(docsDir: string): SourceRoot[] {
       continue;
     }
 
-    for (const name of ["ctx.yaml"]) {
-      const manifestPath = path.join(subDir, name);
-      if (!existsSync(manifestPath)) continue;
-
-      let parsed: unknown;
-      try {
-        parsed = YAML.parse(readFileSync(manifestPath, "utf8"));
-      } catch {
+    let manifestPath: string | undefined;
+    for (const name of ["index.yaml", "index.yml", "ctx.yaml"]) {
+      const candidate = path.join(subDir, name);
+      if (existsSync(candidate)) {
+        manifestPath = candidate;
         break;
       }
-      if (!parsed || typeof parsed !== "object") break;
-
-      const sourceRoot = (parsed as Record<string, unknown>).source_root;
-      if (typeof sourceRoot !== "string" || sourceRoot.length === 0) break;
-      if (!existsSync(sourceRoot)) break;
-
-      result.push({ name: path.basename(sourceRoot), path: sourceRoot });
-      break;
     }
+    if (!manifestPath) continue;
+
+    let parsed: unknown;
+    try {
+      parsed = YAML.parse(readFileSync(manifestPath, "utf8"));
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object") continue;
+
+    const sourceRoot = (parsed as Record<string, unknown>).source_root;
+    if (typeof sourceRoot !== "string" || sourceRoot.length === 0) continue;
+    if (!existsSync(sourceRoot)) continue;
+
+    result.push({ name: path.basename(sourceRoot), path: sourceRoot });
   }
   return result;
 }

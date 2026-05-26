@@ -181,7 +181,7 @@ async function main(): Promise<void> {
 
   if (sources.length === 0) {
     process.stderr.write(
-      `Usage: pnpm context:load\n\n  Add repos to ${CONFIG_FILE_NAME}: { "repos": ["owner/repo"] }\n`,
+      `Usage: pnpm ctx:load\n\n  Add repos to ${CONFIG_FILE_NAME}: { "repos": ["owner/repo"] }\n`,
     );
     process.exit(1);
   }
@@ -209,6 +209,22 @@ async function main(): Promise<void> {
     );
   }
 
+  const byName = new Map<string, string>();
+  for (const r of results) {
+    const prior = byName.get(r.name);
+    const here = r.sourceRoot ?? "(unknown)";
+    if (prior && prior !== here) {
+      process.stderr.write(
+        `[ctx:load] ERROR: two repos resolve to the same name "${r.name}":\n` +
+          `  - ${prior}\n` +
+          `  - ${here}\n` +
+          `Rename one of the local checkouts, or list only one of these repos in ${CONFIG_FILE_NAME}.\n`,
+      );
+      process.exit(1);
+    }
+    byName.set(r.name, here);
+  }
+
   const totalDocs = await writeMergedIndexYaml(dotCacheDir, results);
 
   process.stderr.write(
@@ -216,7 +232,7 @@ async function main(): Promise<void> {
   );
 }
 
-// Only run when this module is executed directly (i.e. via `pnpm context:load`),
+// Only run when this module is executed directly (i.e. via `pnpm ctx:load`),
 // not when something — like a test — imports `readLocalConfig` from it.
 const invokedAsScript = (() => {
   const argv1 = process.argv[1];

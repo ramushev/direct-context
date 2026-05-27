@@ -82,12 +82,7 @@ Restart the editor (or its MCP connection) so direct-context picks up the newly 
 
 Each repo you want to serve needs an `agent-docs/` folder — markdown files with YAML frontmatter describing the repo's architecture, modules, APIs, data flows, runtime behavior, and conventions.
 
-**Recommended: the `initialize-docs` orchestrator.** The fastest path is the one-shot orchestrator at [prompts/initialize-docs.md](prompts/initialize-docs.md). Open the target repo in an agentic editor (Claude Code, Cursor, etc.) that can spawn sub-agents, then run the orchestrator prompt. It:
-
-1. Discovers the repo's modules, flows, APIs, and integrations.
-2. Spawns one sub-agent per documentation phase — and one sub-agent per module / flow / API surface — in five waves (foundations → relevance prune → shared-bundle assembly → fan-out → system-wide). Waves 1, 4, and 5 produce docs; 2 and 3 are orchestrator-only setup.
-3. Each sub-agent reads its own authoritative spec from `prompts/<id>.md` and writes a single markdown file.
-4. The orchestrator writes a minimal `AGENTS.md` pointer at the repo root and validates cross-doc wiki-links.
+**Recommended: the `initialize-docs` orchestrator.** The fastest path is the one-shot orchestrator at [prompts/initialize-docs.md](prompts/initialize-docs.md). Open the target repo in an agentic editor that can spawn sub-agents, then run the prompt — it discovers the repo's modules/flows/APIs, fans out a sub-agent per doc across five waves (foundations → relevance prune → shared-bundle assembly → fan-out → system-wide; waves 1, 4, 5 produce docs, 2 and 3 are orchestrator-only setup), and finishes by writing an `AGENTS.md` pointer at the repo root and validating cross-doc wiki-links. See [Architecture → Doc generation flow](#doc-generation-flow) for the sequence diagram.
 
 Args you can pass to the orchestrator:
 
@@ -106,46 +101,13 @@ Args you can pass to the orchestrator:
 
 Each file is self-contained; open it to see its inputs, output path, and the questions it answers. Some take arguments (e.g. `MODULE_NAME`, `FLOW_NAME`) declared in the prompt's frontmatter.
 
-**Output.** The result lives at `agent-docs/` inside the target repo. **Commit it to VCS** — that's how it persists and how this server pulls it later.
-
-```
-target-repo/
-├── agent-docs/
-│   ├── overview.md
-│   ├── architecture.md
-│   ├── modules/
-│   │   ├── auth.md
-│   │   └── billing.md
-│   ├── apis/
-│   │   └── rest-api.md
-│   └── …
-├── AGENTS.md               # pointer file at the repo root
-├── src/
-└── …
-```
+**Output.** The orchestrator writes `agent-docs/` (full file inventory in [Agent-docs format → Folder layout](#folder-layout)) and an `AGENTS.md` pointer at the repo root, alongside the existing source tree. **Commit both to VCS** — that's how they persist and how this server pulls them later.
 
 ### 2. Load docs
 
-`pnpm ctx:load` reads each configured repo's `agent-docs/` and writes a single merged manifest to `.cache/ctx.yaml`. The server reads `.cache` on startup and resolves all docs from that manifest.
+`pnpm ctx:load` reads each configured repo's `agent-docs/` and writes a single merged manifest to `.cache/ctx.yaml` — see [Architecture → Loader flow](#loader-flow) for the sequence. Sources come from `context.config.json` next to `package.json`; there is no CLI flag or env-var override. The file is gitignored by default — see [context.config.example.json](context.config.example.json) for a template.
 
-Sources come from `context.config.json` in the package root. There is no CLI flag or env-var override — the config file is the single source of truth.
-
-Drop a `context.config.json` next to `package.json`:
-
-```json
-{
-  "repos": [
-    "/Users/me/code/repo-a",
-    "/Users/me/code/repo-b",
-    "owner/some-github-repo@main",
-    "git@bitbucket.org:team/some-bitbucket-repo.git@feature-branch"
-  ]
-}
-```
-
-The file is gitignored by default. See [context.config.example.json](context.config.example.json) for a template.
-
-Each repo entry supports the following forms:
+Each `repos` entry supports the following forms:
 
 | Form                                        | Meaning                                                      |
 |---------------------------------------------|--------------------------------------------------------------|
@@ -208,13 +170,7 @@ The server reads from `.cache/ctx/` by default. Override with `--docs <path>` or
 
 ### HTTP
 
-Start the server:
-
-```bash
-node dist/index.js --transport http --port 3050
-```
-
-Then point your client at it:
+Start the server (see [§3 Run the server](#3-run-the-server) for the full command list), then point your client at it:
 
 ```json
 {

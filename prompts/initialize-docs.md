@@ -89,21 +89,30 @@ run nor the same repo's docs served through the `direct-context` MCP server.
 Doing so launders stale output back in as input and stops the regeneration
 from picking up code changes.
 
-**Direct-context tools the orchestrator must call:**
+**During docs generation, `get_prompt` is the ONLY direct-context tool that
+may be called against the open repo. Every other direct-context tool is
+ignored for the duration of this run.**
+
+**Allowed (and required):**
 
 - `get_prompt({ id: "<phase-id>" })` — resolves each phase's authoritative
   spec. Call it **once per kept phase** (after Wave 2's relevance check) and
   embed the returned body inline in the shared bundle (see Wave 3). This is
   the canonical way to fetch phase specs; do not paste prompt files from disk.
 
-**Direct-context tools the orchestrator must NOT call against the open repo:**
+**Ignored for this run (do NOT call against the open repo):**
 
 - `search_agent_docs`, `get_agent_doc`, `list_agent_docs`,
   `outline_agent_docs` — they return whatever was last ingested by
   `pnpm ctx:load`, by definition older than the code you're about to
   re-describe.
-- `read_source_file` — read the code with the editor's native file tools
-  (Read / Glob / Grep). They're faster and don't go through the MCP sandbox.
+- `read_source_file`, `list_source_dir`, `list_source_roots` — read the code
+  with the editor's native file tools (Read / Glob / Grep). They're faster
+  and don't go through the MCP sandbox.
+
+These tools are ignored **only during this docs-generation run**. Once the
+docs are written, downstream agents working on the code should actively use
+them — that is the entire point of the AGENTS.md managed block below.
 
 **Also do not:**
 
@@ -325,9 +334,11 @@ existing prompts dictate.
 
    **Preferred — `direct-context` MCP server.** If `search_agent_docs`,
    `get_agent_doc`, and `read_source_file` appear in your toolbelt, the
-   `direct-context` server is connected and is the canonical source. It
-   exposes the same docs plus full-text/semantic search and a sandboxed
-   path from each doc back to the source files it cites. Use this loop:
+   `direct-context` server is connected and is the canonical source.
+   **Actively use these tools** before reading code: they expose the same
+   docs plus full-text/semantic search and a sandboxed path from each doc
+   back to the source files it cites, and they cost a fraction of a blind
+   repo scan. Default to this loop before falling back to grep:
 
    1. `search_agent_docs({ query })` — find relevant docs. The default
       engine is BM25; pass `engine: "semantic"` for conceptual queries

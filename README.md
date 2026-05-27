@@ -18,15 +18,22 @@
 
 ## Quickstart
 
-### Step 1 — Install
+### Step 1 — Install and build
 
 ```bash
 pnpm install   # requires Node ≥ 20
+pnpm build     # produces dist/index.js, the entry point your MCP client will spawn
 ```
 
 > Remote repos (GitHub / Bitbucket) are cloned over SSH — `ssh-add` your key first if you want to serve any.
 
-### Step 2 — Generate docs for a target repo
+### Step 2 — Wire your MCP client
+
+Add the server to your editor's MCP config (Cursor, Claude Desktop, etc.) **before** generating docs — the orchestrator in the next step calls `get_prompt` against this MCP server to fetch each phase's spec. See [Client configuration](#client-configuration) below for the exact snippet.
+
+For stdio clients (the common case) the editor spawns the server on demand, so there's nothing else to start.
+
+### Step 3 — Generate docs for a target repo
 
 Open the target repo in an agentic editor (Claude Code, Cursor, etc.) and run the one-shot orchestrator prompt:
 
@@ -34,11 +41,11 @@ Open the target repo in an agentic editor (Claude Code, Cursor, etc.) and run th
 prompts/initialize-docs.md
 ```
 
-This produces `agent-docs/*.md` + `AGENTS.md` inside the target repo. Commit the result to that repo's VCS before continuing.
+The orchestrator resolves every phase spec through `get_prompt` against the MCP server you wired in step 2, then fans out sub-agents to produce `agent-docs/*.md` + `AGENTS.md` inside the target repo. Commit the result to that repo's VCS before continuing.
 
 > To skip or customize phases, see the [doc-generation section](#1-generate-agent-docs) below.
 
-### Step 3 — Configure which repos to serve
+### Step 4 — Configure which repos to serve
 
 ```bash
 cp context.config.example.json context.config.json
@@ -55,24 +62,17 @@ Edit `context.config.json` and list each repo by absolute path or remote ref:
 }
 ```
 
-### Step 4 — Load docs into the local cache
+### Step 5 — Load docs into the local cache
 
 ```bash
 pnpm ctx:load   # writes .cache/ctx.yaml
 ```
 
-### Step 5 — Start the MCP server
+### Step 6 — Reload your MCP client
 
-```bash
-pnpm dev        # stdio — right for IDE clients
-pnpm dev:http   # HTTP on :3050
-```
+Restart the editor (or its MCP connection) so direct-context picks up the newly generated docs. Docs and embeddings are loaded once at startup — there is no hot-reload, so every later `pnpm ctx:load` needs a matching reload.
 
-### Step 6 — Wire your MCP client
-
-Add the server to your editor's MCP config (Cursor, Claude Desktop, etc.). See [Client configuration](#client-configuration) below for the exact snippet.
-
-> **After editing docs**, re-run `pnpm ctx:load` and restart the server. Docs and embeddings are loaded once at startup — there is no hot-reload.
+> Running over HTTP instead of stdio? See [Run the server](#3-run-the-server) for the long-running `pnpm dev:http` / `node dist/index.js --transport http` commands.
 
 ---
 
@@ -91,10 +91,12 @@ Each repo you want to serve needs an `agent-docs/` folder — markdown files wit
 
 Args you can pass to the orchestrator:
 
-| Arg                  | Meaning                                                  |
-|----------------------|----------------------------------------------------------|
-| `PARALLEL_SUBAGENTS` | Cap on concurrent sub-agents in waves 4 & 5 (default 4). |
-| `SKIP_PHASES`        | Comma-separated prompt IDs to skip (e.g. `13-frontend`). |
+| Arg                  | Meaning                                                                                      |
+|----------------------|----------------------------------------------------------------------------------------------|
+| `PARALLEL_SUBAGENTS` | Cap on concurrent sub-agents in waves 4 & 5 (default 4).                                     |
+| `SUBAGENT_MODEL`     | Model for wave-4 & wave-5 sub-agents (default `claude-sonnet-4-6`). Wave 1 stays on parent.  |
+| `SKIP_PHASES`        | Comma-separated prompt IDs to force-skip on top of auto-detected skips (e.g. `10-permissions`). |
+| `FORCE_PHASES`       | Comma-separated prompt IDs to force-keep despite auto-detection (e.g. `13-frontend`).        |
 
 **Manual: run individual prompts.** The orchestrator is built on 18 individual prompts under [prompts/](prompts/). Each prompt produces exactly one doc and can be run on its own — useful for partial coverage, re-runs after code changes, or generating a missing doc. They're organized in three tiers:
 

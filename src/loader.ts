@@ -382,6 +382,22 @@ async function loadDocFromPath(
   };
 }
 
+async function tryLoadDoc(
+  root: string,
+  absPath: string,
+  hint: LoadDocHint,
+): Promise<LoadedDoc | null> {
+  try {
+    return await loadDocFromPath(root, absPath, hint);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(
+      `[loader] WARN: skipping ${path.relative(root, absPath)} — ${msg}\n`,
+    );
+    return null;
+  }
+}
+
 /**
  * Loads a single docs collection rooted at `root`.
  *
@@ -401,20 +417,20 @@ export async function loadSingleDocs(root: string): Promise<LoadedDocs> {
           `Manifest references missing file: ${entry.path} (resolved to ${abs}).`,
         );
       }
-      docs.push(
-        await loadDocFromPath(root, abs, {
-          id: entry.id,
-          kind: entry.kind,
-          tags: entry.tags,
-          title: entry.title,
-          sources: entry.sources,
-          codeRefs: entry.codeRefs,
-        }),
-      );
+      const doc = await tryLoadDoc(root, abs, {
+        id: entry.id,
+        kind: entry.kind,
+        tags: entry.tags,
+        title: entry.title,
+        sources: entry.sources,
+        codeRefs: entry.codeRefs,
+      });
+      if (doc) docs.push(doc);
     }
   } else {
     for (const abs of await walkMarkdown(root)) {
-      docs.push(await loadDocFromPath(root, abs, {}));
+      const doc = await tryLoadDoc(root, abs, {});
+      if (doc) docs.push(doc);
     }
   }
 

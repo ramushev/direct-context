@@ -7,9 +7,13 @@ export interface SearchHit {
   score: number;
   /** Short text excerpt around the matched region. */
   snippet: string;
+  /** 1-based first line of the matched chunk, when search is chunk-based. */
+  startLine?: number;
+  /** 1-based last line of the matched chunk. */
+  endLine?: number;
 }
 
-export type EngineName = "text" | "bm25" | "semantic";
+export type EngineName = "text" | "bm25" | "semantic" | "hybrid";
 
 export interface SearchEngine {
   readonly name: EngineName;

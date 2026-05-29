@@ -1,10 +1,12 @@
 import type { LoadedDoc } from "../loader.js";
 import { Bm25Engine } from "./bm25.js";
+import { HybridEngine } from "./hybrid.js";
 import { SemanticEngine } from "./semantic.js";
 import { TextEngine } from "./text.js";
 import type { EngineName, SearchEngine } from "./types.js";
 
 export { buildSnippet } from "./types.js";
+export { buildLineSnippet, chunkDocs } from "./chunk.js";
 export type { EngineName, SearchEngine, SearchHit } from "./types.js";
 
 export function createEngine(name: EngineName): SearchEngine {
@@ -15,6 +17,8 @@ export function createEngine(name: EngineName): SearchEngine {
       return new Bm25Engine();
     case "semantic":
       return new SemanticEngine();
+    case "hybrid":
+      return new HybridEngine();
   }
 }
 

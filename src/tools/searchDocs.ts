@@ -27,7 +27,9 @@ export const makeSearchDocsTool = (
     config: {
       title: "Search agent docs",
       description:
-        "Search the loaded agent docs using one of the available search engines (text, bm25, semantic). Returns ranked hits with snippets.",
+        "Search the loaded agent docs using one of the available search engines (text, bm25, semantic, hybrid). " +
+        "Results are chunk-level: each hit carries the parent doc `id` plus the `startLine`/`endLine` of the matched region " +
+        "and a line-numbered snippet, so you can jump straight there with read_source_file.",
       inputSchema: {
         query: z.string().min(1).describe("Free-text search query."),
         k: z
@@ -38,10 +40,12 @@ export const makeSearchDocsTool = (
           .optional()
           .describe("Maximum number of hits to return. Defaults to 10."),
         engine: z
-          .enum(["text", "bm25", "semantic"])
+          .enum(["text", "bm25", "semantic", "hybrid"])
           .optional()
           .describe(
-            "Which search engine to use. Defaults to the server's configured default.",
+            "Which search engine to use: 'text' (substring), 'bm25' (keyword, code-aware), " +
+              "'semantic' (embeddings), or 'hybrid' (RRF fusion of bm25 + semantic). " +
+              "Defaults to the server's configured default. 'semantic'/'hybrid' download a model on first use.",
           ),
       },
     },

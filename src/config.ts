@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 
-export type EngineName = "text" | "bm25" | "semantic";
+export type EngineName = "text" | "bm25" | "semantic" | "hybrid";
 export type TransportName = "stdio" | "http";
 
 export interface SourceRoot {
@@ -27,7 +27,7 @@ export interface ServerConfig {
   sourceRoots: readonly SourceRoot[];
 }
 
-const ENGINES = ["text", "bm25", "semantic"] as const satisfies readonly EngineName[];
+const ENGINES = ["text", "bm25", "semantic", "hybrid"] as const satisfies readonly EngineName[];
 const TRANSPORTS = ["stdio", "http"] as const satisfies readonly TransportName[];
 
 const isEngine = (value: string): value is EngineName =>
@@ -69,7 +69,7 @@ function getFlag(argv: readonly string[], flag: string): string | undefined {
  *
  * Recognized flags:
  *   --docs <path>        Explicit agent-docs directory. Overrides the default.
- *   --engine <name>      Default search engine. Also CONTEXT_ENGINE. Defaults to "bm25".
+ *   --engine <name>      Default search engine. Also CONTEXT_ENGINE. Defaults to "hybrid".
  *   --transport <name>   Transport to use (stdio|http). Also CONTEXT_TRANSPORT. Defaults to "stdio".
  *   --port <number>      Port for HTTP transport. Also CONTEXT_PORT. Defaults to 3050.
  *
@@ -92,7 +92,7 @@ export function parseConfig(
       : path.join(pkgRoot, ".cache");
 
   const engineRaw =
-    getFlag(argv, "engine") ?? process.env.CONTEXT_ENGINE ?? "bm25";
+    getFlag(argv, "engine") ?? process.env.CONTEXT_ENGINE ?? "hybrid";
   if (!isEngine(engineRaw)) {
     throw new Error(
       `Invalid engine "${engineRaw}". Expected one of: ${ENGINES.join(", ")}.`,

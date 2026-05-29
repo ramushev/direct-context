@@ -1,35 +1,38 @@
 import MiniSearch from "minisearch";
 import type { LoadedDoc } from "../loader.js";
-import { buildSnippet, type SearchEngine, type SearchHit } from "./types.js";
+import { type Chunk, buildLineSnippet, chunkDocs, tokenizeCode } from "./chunk.js";
+import { type SearchEngine, type SearchHit } from "./types.js";
 
-interface IndexedDoc {
+interface IndexedChunk {
   id: string;
   title: string;
   tags: string;
-  body: string;
+  text: string;
 }
 
 /**
- * BM25-ish ranking via MiniSearch (term frequency + IDF + field weighting).
- * Title and tags are weighted higher than body.
+ * BM25-ish ranking via MiniSearch (term frequency + IDF + field weighting)
+ * over per-chunk units. Title and tags are weighted higher than body.
  *
- * Configured with prefix and fuzzy search so partial words still match,
- * which is a better fit for documentation-style queries.
+ * Uses a code-aware tokenizer so camelCase/snake_case identifiers are findable
+ * by their parts, plus prefix and fuzzy search so partial words still match.
  */
 export class Bm25Engine implements SearchEngine {
   readonly name = "bm25" as const;
-  private index: MiniSearch<IndexedDoc> | null = null;
-  private docsById = new Map<string, LoadedDoc>();
+  private index: MiniSearch<IndexedChunk> | null = null;
+  private chunksById = new Map<string, Chunk>();
 
   async init(docs: readonly LoadedDoc[]): Promise<void> {
-    this.docsById = new Map(docs.map((d) => [d.id, d]));
+    const chunks = chunkDocs(docs);
+    this.chunksById = new Map(chunks.map((c) => [c.id, c]));
 
-    this.index = new MiniSearch<IndexedDoc>({
+    this.index = new MiniSearch<IndexedChunk>({
       idField: "id",
-      fields: ["title", "tags", "body"],
-      storeFields: ["id", "title"],
+      fields: ["title", "tags", "text"],
+      storeFields: ["id"],
+      tokenize: tokenizeCode,
       searchOptions: {
-        boost: { title: 3, tags: 2, body: 1 },
+        boost: { title: 3, tags: 2, text: 1 },
         prefix: true,
         fuzzy: 0.2,
         combineWith: "AND",
@@ -37,11 +40,11 @@ export class Bm25Engine implements SearchEngine {
     });
 
     this.index.addAll(
-      docs.map((d) => ({
-        id: d.id,
-        title: d.title,
-        tags: d.tags.join(" "),
-        body: d.body,
+      chunks.map((c) => ({
+        id: c.id,
+        title: c.title,
+        tags: c.tags.join(" "),
+        text: c.text,
       })),
     );
   }
@@ -51,13 +54,15 @@ export class Bm25Engine implements SearchEngine {
 
     const hits: SearchHit[] = [];
     for (const r of this.index.search(q).slice(0, k)) {
-      const doc = this.docsById.get(String(r.id));
-      if (!doc) continue;
+      const chunk = this.chunksById.get(String(r.id));
+      if (!chunk) continue;
       hits.push({
-        id: doc.id,
-        title: doc.title,
+        id: chunk.docId,
+        title: chunk.title,
         score: r.score,
-        snippet: buildSnippet(doc.body, q),
+        snippet: buildLineSnippet(chunk, q),
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
       });
     }
     return hits;

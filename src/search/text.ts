@@ -1,24 +1,20 @@
 import type { LoadedDoc } from "../loader.js";
-import {
-  buildSnippet,
-  queryTerms,
-  type SearchEngine,
-  type SearchHit,
-} from "./types.js";
+import { type Chunk, buildLineSnippet, chunkDocs } from "./chunk.js";
+import { queryTerms, type SearchEngine, type SearchHit } from "./types.js";
 
 /**
- * Substring search over body + title + tags.
+ * Substring search over chunk text + title + tags.
  *
  * Score is the number of (case-insensitive) substring occurrences across all
- * terms in the query, summed; documents that match more terms more often rank
+ * terms in the query, summed; chunks that match more terms more often rank
  * higher. Title and tag matches are weighted (x3 and x2 respectively).
  */
 export class TextEngine implements SearchEngine {
   readonly name = "text" as const;
-  private docs: readonly LoadedDoc[] = [];
+  private chunks: readonly Chunk[] = [];
 
   async init(docs: readonly LoadedDoc[]): Promise<void> {
-    this.docs = docs;
+    this.chunks = chunkDocs(docs);
   }
 
   async query(q: string, k: number): Promise<SearchHit[]> {
@@ -26,14 +22,14 @@ export class TextEngine implements SearchEngine {
     if (terms.length === 0) return [];
 
     const hits: SearchHit[] = [];
-    for (const doc of this.docs) {
-      const titleLower = doc.title.toLowerCase();
-      const tagsLower = doc.tags.map((t) => t.toLowerCase());
-      const bodyLower = doc.body.toLowerCase();
+    for (const chunk of this.chunks) {
+      const titleLower = chunk.title.toLowerCase();
+      const tagsLower = chunk.tags.map((t) => t.toLowerCase());
+      const textLower = chunk.text.toLowerCase();
 
       let score = 0;
       for (const term of terms) {
-        score += countOccurrences(bodyLower, term);
+        score += countOccurrences(textLower, term);
         if (titleLower.includes(term)) score += 3;
         for (const tag of tagsLower) {
           if (tag.includes(term)) score += 2;
@@ -41,10 +37,12 @@ export class TextEngine implements SearchEngine {
       }
       if (score > 0) {
         hits.push({
-          id: doc.id,
-          title: doc.title,
+          id: chunk.docId,
+          title: chunk.title,
           score,
-          snippet: buildSnippet(doc.body, q),
+          snippet: buildLineSnippet(chunk, q),
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
         });
       }
     }

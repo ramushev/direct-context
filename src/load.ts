@@ -4,6 +4,7 @@ import YAML from "yaml";
 
 import { ensureRepoCached, parseGitRef, type GitRef } from "./git.js";
 import { loadSingleDocs, type LoadedDoc } from "./loader.js";
+import { loadRawRepoDocs } from "./raw.js";
 
 const CONFIG_FILE_NAME = "context.config.json";
 const AGENT_DOCS_FOLDER = "agent-docs";
@@ -139,17 +140,16 @@ async function loadLocal(repoPath: string): Promise<RepoResult> {
     process.exit(1);
   }
 
+  const repoName = path.basename(repoPath);
   const docsSource = path.join(repoPath, AGENT_DOCS_FOLDER);
   if (!existsSync(docsSource)) {
     process.stderr.write(
-      `[ctx:load] ERROR: no ${AGENT_DOCS_FOLDER}/ found in ${repoPath}\n` +
-        `  Expected: ${docsSource}\n` +
-        `  Run the collect prompts against this repo first.\n`,
+      `[ctx:load] no ${AGENT_DOCS_FOLDER}/ in ${repoPath} — raw mode: indexing source files\n`,
     );
-    process.exit(1);
+    const docs = await loadRawRepoDocs(repoPath, repoName);
+    return { name: repoName, docs, sourceRoot: repoPath };
   }
 
-  const repoName = path.basename(repoPath);
   const { docs } = await loadSingleDocs(docsSource);
   return { name: repoName, docs, sourceRoot: repoPath };
 }
@@ -165,10 +165,11 @@ async function loadFromGit(
 
   const docsSource = path.join(repoRoot, AGENT_DOCS_FOLDER);
   if (!existsSync(docsSource)) {
-    throw new Error(
-      `No ${AGENT_DOCS_FOLDER}/ folder found in ${label}. ` +
-        `Run the collect prompts against this repo first.`,
+    process.stderr.write(
+      `[ctx:load] no ${AGENT_DOCS_FOLDER}/ in ${label} — raw mode: indexing source files\n`,
     );
+    const docs = await loadRawRepoDocs(repoRoot, ref.repo);
+    return { name: ref.repo, docs, sourceRoot: repoRoot };
   }
 
   const { docs } = await loadSingleDocs(docsSource);

@@ -10,9 +10,10 @@
 ## Features
 
 - **Doc-generation toolkit** — 18 prompts plus a one-shot orchestrator that produce per-repo `agent-docs/`.
+- **Raw mode** — repos without generated docs are still served: their source files are indexed directly, so you can point the server at any repo immediately.
 - **MCP server** — exposes docs to any MCP client (Cursor, Claude Desktop, etc.) over stdio or HTTP.
 - **Multi-repo** — point at any number of local checkouts or GitHub / Bitbucket refs (SSH).
-- **Three search engines** — `text` (substring), `bm25` (keyword), `semantic` (MiniLM, in-process).
+- **Four search engines** — `text` (substring), `bm25` (keyword, code-aware), `semantic` (MiniLM, in-process), `hybrid` (RRF fusion of the latter two). Search is chunk-level: hits carry line ranges and line-numbered snippets.
 - **Source-file reads** — sandboxed `read_source_file` follows `code_refs` from docs to the actual files.
 - **Zero runtime config** — `pnpm ctx:load` writes everything the server needs; the server reads it on startup.
 
@@ -122,13 +123,13 @@ Remote repos are cloned over SSH, so authentication relies on your local SSH age
 
 For each repo, the loader:
 
-- **Local repos**: reads `<repo>/agent-docs/` in place — docs are not copied.
-- **Remote repos**: clones or fetches the repo into `.cache/repos/<repo-name>/`, then reads `agent-docs/` from there.
+- **Local repos**: reads `<repo>/agent-docs/` in place — docs are not copied. Falls back to raw-indexing the repo's source files when `agent-docs/` is absent (see below).
+- **Remote repos**: clones or fetches the repo into `.cache/repos/<repo-name>/`, then reads `agent-docs/` from there — or raw-indexes the clone when it has none.
 - Writes a single merged `.cache/ctx.yaml` — a manifest listing every doc across all repos with `id`, `kind`, `tags`, `code_refs`, and a `source_roots:` map so the server auto-registers source roots on startup.
 
 Remote clones are kept under `.cache/repos/` and reused across loads — subsequent `pnpm ctx:load` runs do a shallow `git fetch` + `reset --hard` rather than re-cloning from scratch.
 
-Each repo's `agent-docs/` folder must exist before loading — the loader exits with an error otherwise. Generate it first (step 1).
+**Raw mode (no `agent-docs/`).** Generated docs are recommended, but not required. When a configured repo has no `agent-docs/` folder, `ctx:load` falls back to **raw mode**: it indexes the repo's own source files as searchable docs (`kind: source`) instead of erroring. File selection prefers `git ls-files` (tracked files only, honoring `.gitignore`) and falls back to a filtered directory walk; binary, oversized (>512 KB), and lockfile entries are skipped. Each indexed file carries a self `code_ref` so an agent can pull the full file via `read_source_file`. This lets you point the server at a repo immediately and generate proper docs later. Mix freely — some repos with docs, some raw.
 
 **Repo names must be unique.** Each repo is identified by the basename of its path (local) or the `repo` portion of its ref (remote). If two entries resolve to the same name (e.g. `/work/foo` and `other-owner/foo`), `ctx:load` fails — rename one of the checkouts or drop one entry.
 
@@ -187,7 +188,7 @@ Start the server (see [§3 Run the server](#3-run-the-server) for the full comma
 | Flag             | Env var               | Default       | Notes                                                                                                  |
 |------------------|-----------------------|---------------|--------------------------------------------------------------------------------------------------------|
 | `--docs`         | `AGENT_DOCS_DIR`      | `.cache`      | Explicit agent-docs directory override.                                                                |
-| `--engine`       | `CONTEXT_ENGINE`      | `bm25`        | Default search engine. One of `text`, `bm25`, `semantic`.                                          |
+| `--engine`       | `CONTEXT_ENGINE`      | `hybrid`      | Default search engine. One of `text`, `bm25`, `semantic`, `hybrid`. `hybrid`/`semantic` download a model on first query. |
 | `--transport`    | `CONTEXT_TRANSPORT`   | `stdio`       | Transport. One of `stdio`, `http`.                                                                     |
 | `--port`         | `CONTEXT_PORT`        | `3050`        | Port for HTTP transport. Ignored when transport is `stdio`.                                            |
 | `--source-root`  | `AGENT_SOURCE_ROOTS`  | (none)        | Source-code root the `read_source_file` tool may read from. Repeatable flag; env var is comma-separated. |
@@ -234,13 +235,16 @@ Each prompt's frontmatter declares `args` for any `$VAR` / `${VAR}` tokens it re
 
 ## Search engines
 
+All engines search **chunks**, not whole files: each doc is split into structure-aware slices (code on function/class boundaries, markdown on headings; long sections windowed with overlap). Hits therefore carry the parent doc `id` plus the matched `startLine`/`endLine` and a line-numbered snippet — so an agent can jump straight to the region with `read_source_file`. Chunking also keeps each unit near the embedding model's token window, so content deep in a large file stays retrievable.
+
 | Engine     | Tech                                                                                           | Pros                                               | Cons                                                       |
 |------------|------------------------------------------------------------------------------------------------|----------------------------------------------------|------------------------------------------------------------|
 | `text`     | substring + tag/title boost                                                                    | zero deps, instant startup, predictable            | exact-match only, no stemming, no semantic recall          |
-| `bm25`     | [minisearch](https://lucaong.github.io/minisearch/) (BM25, fuzzy, prefix)                      | strong default for keyword-style queries; no model | still keyword-based                                        |
-| `semantic` | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) MiniLM-L6, in-process | conceptual recall ("how do tokens get validated")  | first run downloads the model (cached under `.transformers-cache`); embeds all docs at start |
+| `bm25`     | [minisearch](https://lucaong.github.io/minisearch/) (BM25, fuzzy, prefix) with a code-aware tokenizer that splits camelCase/snake_case identifiers | strong default for keyword-style queries; `get user` finds `getUserById`; no model | still keyword-based                                        |
+| `semantic` | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) MiniLM-L6, in-process | conceptual recall ("how do tokens get validated")  | first run downloads the model (cached under `.transformers-cache`); embeds all chunks at start |
+| `hybrid`   | Reciprocal Rank Fusion of `bm25` + `semantic`                                                  | best overall recall — combines exact-keyword and conceptual matches | pulls in the semantic engine, so it carries the same model-download cost |
 
-The semantic engine is initialized lazily on first query, so startup stays snappy if you never use it.
+The semantic and hybrid engines are initialized lazily on first query, so startup stays snappy if you never use them.
 
 ## Architecture
 

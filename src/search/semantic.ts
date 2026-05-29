@@ -1,7 +1,8 @@
 import type { FeatureExtractionPipeline } from "@huggingface/transformers";
 import { pipeline } from "@huggingface/transformers";
 import type { LoadedDoc } from "../loader.js";
-import { buildSnippet, type SearchEngine, type SearchHit } from "./types.js";
+import { type Chunk, buildLineSnippet, chunkDocs } from "./chunk.js";
+import { type SearchEngine, type SearchHit } from "./types.js";
 
 const MODEL_ID = "Xenova/all-MiniLM-L6-v2";
 
@@ -11,25 +12,27 @@ const MODEL_ID = "Xenova/all-MiniLM-L6-v2";
  * `@huggingface/transformers`. Works fully offline after the first model
  * download (cached under `.transformers-cache`).
  *
- * Each document is embedded once at startup as `title + "\n\n" + body`.
- * Queries are embedded on demand and ranked by cosine similarity.
+ * Each chunk is embedded once at startup as `title + "\n\n" + text`; chunking
+ * keeps each input near the model's ~256-token window so most of a chunk's
+ * content survives the embedding. Queries are embedded on demand and ranked by
+ * cosine similarity.
  */
 export class SemanticEngine implements SearchEngine {
   readonly name = "semantic" as const;
   private extractor: FeatureExtractionPipeline | null = null;
-  private docs: readonly LoadedDoc[] = [];
+  private chunks: readonly Chunk[] = [];
   private vectors: Float32Array[] = [];
 
   async init(docs: readonly LoadedDoc[]): Promise<void> {
-    this.docs = docs;
+    this.chunks = chunkDocs(docs);
     this.extractor = (await pipeline(
       "feature-extraction",
       MODEL_ID,
     )) as FeatureExtractionPipeline;
 
     this.vectors = [];
-    for (const doc of docs) {
-      this.vectors.push(await this.embed(`${doc.title}\n\n${doc.body}`));
+    for (const chunk of this.chunks) {
+      this.vectors.push(await this.embed(`${chunk.title}\n\n${chunk.text}`));
     }
   }
 
@@ -37,21 +40,23 @@ export class SemanticEngine implements SearchEngine {
     if (!this.extractor || q.trim().length === 0) return [];
 
     const qVec = await this.embed(q);
-    const scored: Array<{ doc: LoadedDoc; score: number }> = [];
-    for (const [i, doc] of this.docs.entries()) {
+    const scored: Array<{ chunk: Chunk; score: number }> = [];
+    for (const [i, chunk] of this.chunks.entries()) {
       const vec = this.vectors[i];
-      if (!doc || !vec) continue;
-      scored.push({ doc, score: dot(qVec, vec) });
+      if (!chunk || !vec) continue;
+      scored.push({ chunk, score: dot(qVec, vec) });
     }
 
     return scored
       .toSorted((a, b) => b.score - a.score)
       .slice(0, k)
-      .map(({ doc, score }) => ({
-        id: doc.id,
-        title: doc.title,
+      .map(({ chunk, score }) => ({
+        id: chunk.docId,
+        title: chunk.title,
         score,
-        snippet: buildSnippet(doc.body, q),
+        snippet: buildLineSnippet(chunk, q),
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
       }));
   }
 

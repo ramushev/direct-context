@@ -2,22 +2,24 @@
 
 *An MCP server that turns any repository into searchable agent context.*
 
-`direct-context` is two things in one package:
+Point it at any repo and it works immediately — every repo is snapshotted into a local cache, its source files are indexed, and a compact structured map is synthesized in **synthetic mode** (no AI). Generating richer `agent-docs/` with the prompt toolkit is an optional next step that upgrades a repo to higher-signal context. So `direct-context` is two things in one package:
 
-1. **A doc-generation toolkit.** A library of prompts (under [prompts/](prompts/)) you run against a target repo to produce `agent-docs/` — structured markdown describing how the repo works.
-2. **An MCP server.** Loads one or more repos' `agent-docs/` into a local cache and exposes them to agents via MCP tools (`search_agent_docs`, `get_agent_doc`, `read_source_file`, …) and as MCP prompts.
+1. **An MCP server.** Loads one or more repos into a local cache and exposes them to agents via MCP tools (`search_agent_docs`, `get_agent_doc`, `read_source_file`, …) and as MCP prompts. Works out of the box on any repo (synthetic mode); serves committed `agent-docs/` as-is when present.
+2. **A doc-generation toolkit.** A library of prompts (under [prompts/](prompts/)) you run against a target repo to produce richer `agent-docs/` — structured markdown describing how the repo works — for sharper retrieval than source alone.
 
 ## Features
 
 - **Doc-generation toolkit** — 18 prompts plus a one-shot orchestrator that produce per-repo `agent-docs/`.
-- **Raw mode** — repos without generated docs are still served: their source files are indexed directly, so you can point the server at any repo immediately.
+- **Synthetic mode** — repos without committed docs are still served: their source files are indexed *and* a compact `agent-docs/` set (`overview`, `architecture`, a consolidated `modules` map, and `project-details`) is synthesized programmatically, so you can point the server at any repo immediately and get a usable map.
 - **MCP server** — exposes docs to any MCP client (Cursor, Claude Desktop, etc.) over stdio or HTTP.
-- **Multi-repo** — point at any number of local checkouts or GitHub / Bitbucket refs (SSH).
+- **Multi-repo** — point at any number of local checkouts or GitHub / Bitbucket refs (SSH); a generated `repos-index` doc indexes them all for cross-repo navigation.
 - **Four search engines** — `text` (substring), `bm25` (keyword, code-aware), `semantic` (MiniLM, in-process), `hybrid` (RRF fusion of the latter two). Search is chunk-level: hits carry line ranges and line-numbered snippets.
 - **Source-file reads** — sandboxed `read_source_file` follows `code_refs` from docs to the actual files.
 - **Zero runtime config** — `pnpm ctx:load` writes everything the server needs; the server reads it on startup.
 
 ## Quickstart
+
+Steps 1–4 get you a working context server in **synthetic mode** — no doc generation required. Step 5 is the optional optimization pass.
 
 ### Step 1 — Install and build
 
@@ -28,25 +30,7 @@ pnpm build     # produces dist/index.js, the entry point your MCP client will sp
 
 > Remote repos (GitHub / Bitbucket) are cloned over SSH — `ssh-add` your key first if you want to serve any.
 
-### Step 2 — Wire your MCP client
-
-Add the server to your editor's MCP config (Cursor, Claude Desktop, etc.) **before** generating docs — the orchestrator in the next step calls `get_prompt` against this MCP server to fetch each phase's spec. See [Client configuration](#client-configuration) below for the exact snippet.
-
-For stdio clients (the common case) the editor spawns the server on demand, so there's nothing else to start.
-
-### Step 3 — Generate docs for a target repo
-
-Open the target repo in an agentic editor (Claude Code, Cursor, etc.) and run the one-shot orchestrator prompt:
-
-```
-prompts/initialize-docs.md
-```
-
-The orchestrator resolves every phase spec through `get_prompt` against the MCP server you wired in step 2, then fans out sub-agents to produce `agent-docs/*.md` + `AGENTS.md` inside the target repo. Commit the result to that repo's VCS before continuing.
-
-> To skip or customize phases, see the [doc-generation section](#1-generate-agent-docs) below.
-
-### Step 4 — Configure which repos to serve
+### Step 2 — Configure which repos to serve
 
 ```bash
 cp context.config.example.json context.config.json
@@ -63,17 +47,33 @@ Edit `context.config.json` and list each repo by absolute path or remote ref:
 }
 ```
 
-### Step 5 — Load docs into the local cache
+### Step 3 — Load into the local cache
 
 ```bash
 pnpm ctx:load   # writes .cache/ctx.yaml
 ```
 
-### Step 6 — Reload your MCP client
+Any repo without a committed `agent-docs/` folder is served in **synthetic mode** automatically — it's snapshotted into the cache, its source files are indexed, *and* a compact `agent-docs/` map (`overview` / `architecture` / `modules` / `project-details`) is synthesized programmatically, nothing else required. See [Synthetic mode](#2-load-docs) for what gets generated.
 
-Restart the editor (or its MCP connection) so direct-context picks up the newly generated docs. Docs and embeddings are loaded once at startup — there is no hot-reload, so every later `pnpm ctx:load` needs a matching reload.
+### Step 4 — Wire your MCP client and run
 
-> Running over HTTP instead of stdio? See [Run the server](#3-run-the-server) for the long-running `pnpm dev:http` / `node dist/index.js --transport http` commands.
+Add the server to your editor's MCP config (Cursor, Claude Desktop, etc.) — see [Client configuration](#client-configuration) below for the exact snippet. For stdio clients (the common case) the editor spawns the server on demand, so there's nothing else to start; restart the editor (or its MCP connection) so direct-context picks up the cache.
+
+**You now have a working context server.** Search, doc fetches, and source reads all work against the synthetic-mode repos (synthesized map + indexed source). The step below is optional and improves retrieval quality.
+
+> Docs and embeddings are loaded once at startup — there is no hot-reload, so every later `pnpm ctx:load` needs a matching reload. Running over HTTP instead of stdio? See [Run the server](#3-run-the-server) for the long-running `pnpm dev:http` / `node dist/index.js --transport http` commands.
+
+### Step 5 — (Optional) Generate docs to optimize a repo's context
+
+Synthetic mode already gives you a compact synthesized map plus indexed source; running the prompt toolkit upgrades a repo to structured, higher-signal context (architecture, modules, flows, APIs, business logic) that retrieves far better and captures what no-AI synthesis can't. With your MCP client wired (Step 4), open the target repo in an agentic editor (Claude Code, Cursor, etc.) and run the one-shot orchestrator prompt:
+
+```
+prompts/initialize-docs.md
+```
+
+The orchestrator resolves every phase spec through `get_prompt` against the MCP server you wired in Step 4, then fans out sub-agents to produce `agent-docs/*.md` + `AGENTS.md` inside the target repo. Commit the result to that repo's VCS, then re-run `pnpm ctx:load` and reload your client (Steps 3–4) to serve the optimized docs.
+
+> To skip or customize phases, see the [doc-generation section](#1-generate-agent-docs) below.
 
 ---
 
@@ -81,7 +81,7 @@ Restart the editor (or its MCP connection) so direct-context picks up the newly 
 
 ### 1. Generate agent docs
 
-Each repo you want to serve needs an `agent-docs/` folder — markdown files with YAML frontmatter describing the repo's architecture, modules, APIs, data flows, runtime behavior, and conventions.
+This step is **optional** — a repo is already served in synthetic mode (§2 below) without it. Generating an `agent-docs/` folder optimizes a repo's context: markdown files with YAML frontmatter describing the repo's architecture, modules, APIs, data flows, runtime behavior, and conventions — the AI-driven step captures flows, business logic, and design rationale that the programmatic synthetic map can't, and retrieves with far higher signal.
 
 **Recommended: the `initialize-docs` orchestrator.** The fastest path is the one-shot orchestrator at [prompts/initialize-docs.md](prompts/initialize-docs.md). Open the target repo in an agentic editor that can spawn sub-agents, then run the prompt — it discovers the repo's modules/flows/APIs, fans out a sub-agent per doc across five waves (foundations → relevance prune → shared-bundle assembly → fan-out → system-wide; waves 1, 4, 5 produce docs, 2 and 3 are orchestrator-only setup), and finishes by writing an `AGENTS.md` pointer at the repo root and validating cross-doc wiki-links. See [Architecture → Doc generation flow](#doc-generation-flow) for the sequence diagram.
 
@@ -106,13 +106,13 @@ Each file is self-contained; open it to see its inputs, output path, and the que
 
 ### 2. Load docs
 
-`pnpm ctx:load` reads each configured repo's `agent-docs/` and writes a single merged manifest to `.cache/ctx.yaml` — see [Architecture → Loader flow](#loader-flow) for the sequence. Sources come from `context.config.json` next to `package.json`; there is no CLI flag or env-var override. The file is gitignored by default — see [context.config.example.json](context.config.example.json) for a template.
+`pnpm ctx:load` snapshots each configured repo into the cache, builds its docs (committed `agent-docs/` if present, otherwise synthetic mode), and writes a single merged manifest to `.cache/ctx.yaml` — see [Architecture → Loader flow](#loader-flow) for the sequence. Sources come from `context.config.json` next to `package.json`; there is no CLI flag or env-var override. The file is gitignored by default — see [context.config.example.json](context.config.example.json) for a template.
 
 Each `repos` entry supports the following forms:
 
 | Form                                        | Meaning                                                      |
 |---------------------------------------------|--------------------------------------------------------------|
-| `/abs/path/to/checkout`                     | Local repo — reads `agent-docs/` in place (no copy).        |
+| `/abs/path/to/checkout`                     | Local repo — snapshotted into the cache (working tree untouched). |
 | `owner/repo` / `owner/repo@ref`             | GitHub via SSH (`git@github.com:owner/repo.git`).            |
 | `github:owner/repo@ref`                     | Same as above, explicit prefix.                              |
 | `git@github.com:owner/repo.git@ref`         | Full SSH URL, optional `@ref` suffix.                        |
@@ -123,13 +123,24 @@ Remote repos are cloned over SSH, so authentication relies on your local SSH age
 
 For each repo, the loader:
 
-- **Local repos**: reads `<repo>/agent-docs/` in place — docs are not copied. Falls back to raw-indexing the repo's source files when `agent-docs/` is absent (see below).
-- **Remote repos**: clones or fetches the repo into `.cache/repos/<repo-name>/`, then reads `agent-docs/` from there — or raw-indexes the clone when it has none.
-- Writes a single merged `.cache/ctx.yaml` — a manifest listing every doc across all repos with `id`, `kind`, `tags`, `code_refs`, and a `source_roots:` map so the server auto-registers source roots on startup.
+- **Local repos**: snapshotted into `.cache/repos/<name>/` (tracked + untracked-but-unignored files, honoring `.gitignore`) — your working tree is never touched. A committed `agent-docs/` is served as-is; otherwise the repo gets synthetic mode (a synthesized map). The cache copy is the source root, so `read_source_file` serves a stable snapshot.
+- **Remote repos**: cloned or fetched into `.cache/repos/<name>/`. A git-tracked `agent-docs/` is served as-is; otherwise synthetic mode runs on the clone.
+- Writes a single merged `.cache/ctx.yaml` — a manifest listing every doc across all repos with `id`, `kind`, `tags`, `code_refs`, and a `source_roots:` map so the server auto-registers source roots on startup — plus a top-level `repos-index` doc summarizing every loaded repo.
 
-Remote clones are kept under `.cache/repos/` and reused across loads — subsequent `pnpm ctx:load` runs do a shallow `git fetch` + `reset --hard` rather than re-cloning from scratch.
+Both kinds live under `.cache/repos/` and are reused across loads: remote clones do a shallow `git fetch` + `reset --hard` rather than re-cloning from scratch, and local snapshots are re-copied each load so they pick up your latest changes.
 
-**Raw mode (no `agent-docs/`).** Generated docs are recommended, but not required. When a configured repo has no `agent-docs/` folder, `ctx:load` falls back to **raw mode**: it indexes the repo's own source files as searchable docs (`kind: source`) instead of erroring. File selection prefers `git ls-files` (tracked files only, honoring `.gitignore`) and falls back to a filtered directory walk; binary, oversized (>512 KB), and lockfile entries are skipped. Each indexed file carries a self `code_ref` so an agent can pull the full file via `read_source_file`. This lets you point the server at a repo immediately and generate proper docs later. Mix freely — some repos with docs, some raw.
+**Synthetic mode (no committed `agent-docs/`).** Generated docs are recommended, but not required. When a configured repo has no committed `agent-docs/` folder, `ctx:load` falls back to **synthetic mode** instead of erroring. Synthetic mode, without an LLM:
+
+1. **Reads the source files** to drive synthesis — file selection prefers `git ls-files` (tracked files, honoring `.gitignore`) and falls back to a filtered directory walk; binary, oversized (>512 KB), and lockfile entries are skipped. The raw files are **not** added to the search index as `kind: source` docs; agents reach them through `read_source_file`, following the `code_refs` on the synthesized docs below.
+2. **Synthesizes a compact map (≤5 files)** programmatically from the repo's own metadata and layout, written into the checkout's `agent-docs/` folder — the same place and layout committed docs use:
+   - `overview` — `package.json` summary, README excerpt + heading TOC, language stats, entry points.
+   - `architecture` — directory tree + top-level areas + entry/key files.
+   - `modules` — one consolidated map: each top-level area with its files and regex-extracted exported symbols (TS/JS, Python, Go, Rust, Java/Kotlin, Ruby, C#, PHP, Swift, C/C++, Scala).
+   - `project-details` — build/test/run commands, test setup, config, and CI/deploy signals (emitted only when such signals exist).
+
+   These are tagged `synthetic` and regenerated on every `ctx:load`. They live in the cached checkout (`.cache/repos/<name>/agent-docs/`), so they are never written to your working tree. Synthesized docs are recognized on later loads (untracked in a clone; absent from the freshly re-copied local snapshot), so a committed or AI-authored `agent-docs/` is never clobbered.
+
+Synthetic mode gives an agent a usable map immediately; the AI orchestrator (§1) is the upgrade path when you want flows, business logic, and design rationale. Mix freely — some repos with full `agent-docs/`, some synthetic.
 
 **Repo names must be unique.** Each repo is identified by the basename of its path (local) or the `repo` portion of its ref (remote). If two entries resolve to the same name (e.g. `/work/foo` and `other-owner/foo`), `ctx:load` fails — rename one of the checkouts or drop one entry.
 
@@ -148,7 +159,7 @@ node dist/index.js                              # stdio
 node dist/index.js --transport http --port 3050 # HTTP
 ```
 
-The server reads from `.cache/ctx/` by default. Override with `--docs <path>` or `AGENT_DOCS_DIR=<path>`.
+The server reads from `.cache/` by default. Override with `--docs <path>` or `AGENT_DOCS_DIR=<path>`.
 
 ## Client configuration
 
@@ -278,7 +289,7 @@ sequenceDiagram
 
 ### Loader flow
 
-`pnpm ctx:load` reads the repo list from `context.config.json`, reads each repo's `agent-docs/` (in place for local repos; via a cached clone for remote ones), and writes a single merged `.cache/ctx.yaml` that the server reads at runtime.
+`pnpm ctx:load` reads the repo list from `context.config.json`, snapshots each repo into `.cache/repos/` (a copy for local repos; a clone for remote ones), builds its docs (committed `agent-docs/` or synthetic mode), and writes a single merged `.cache/ctx.yaml` that the server reads at runtime.
 
 ```mermaid
 sequenceDiagram
@@ -294,17 +305,18 @@ sequenceDiagram
     CLI->>Cfg: Read repo list
     Cfg-->>CLI: ["/path/to/repo-a", "owner/repo-b@main"]
 
-    CLI->>Local: Read agent-docs/ in place (no copy)
-    CLI->>Local: Parse frontmatter of every *.md
-    Local-->>CLI: docs[] for repo-a
+    CLI->>Local: Enumerate tracked + unignored files
+    Local-->>Repos: Snapshot into .cache/repos/repo-a/
+    CLI->>Repos: Build docs — committed agent-docs/, else synthetic mode (index + synthesize)
+    Repos-->>CLI: docs[] for repo-a
 
     CLI->>Repos: Shallow clone (or fetch+reset) into .cache/repos/repo-b/
     Repos->>Remote: git clone / git fetch (SSH)
     Remote-->>Repos: Repo at ref
-    CLI->>Repos: Read agent-docs/ from clone
+    CLI->>Repos: Build docs — git-tracked agent-docs/, else synthetic mode
     Repos-->>CLI: docs[] for repo-b
 
-    CLI->>Cache: Write ctx.yaml (merged manifest, source_roots map)
+    CLI->>Cache: Write ctx.yaml (merged manifest, source_roots, repos-index)
 
     CLI-->>Dev: ✓ 2 repo(s), N total doc(s)
 ```

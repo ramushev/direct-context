@@ -9,7 +9,7 @@ const mkSourceDoc = (id: string, body: string): LoadedDoc => ({
   id,
   title: id,
   kind: "source",
-  tags: ["raw", "ts"],
+  tags: ["synthetic", "ts"],
   sources: [],
   codeRefs: [],
   absPath: `/${id}`,

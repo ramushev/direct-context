@@ -7,7 +7,6 @@ import { EngineRegistry } from "./search/index.js";
 import { makeGetDocTool } from "./tools/getDoc.js";
 import { makeGetPromptTool } from "./tools/getPrompt.js";
 import { makeListDocsTool } from "./tools/listDocs.js";
-import { makeOutlineTool } from "./tools/outline.js";
 import {
   makeListDirectoryTool,
   makeListSourceRootsTool,
@@ -31,7 +30,7 @@ const sanitizePromptName = (name: string): string =>
  * - Loads the agent docs from disk.
  * - Constructs the engine registry but does not eagerly initialize engines;
  *   an engine is initialized the first time it is queried.
- * - Registers four tools: list/get/search/outline.
+ * - Registers three tools: list/get/search.
  * - Registers every prompt under the prompts directory.
  *
  * The returned `server` is not yet connected to a transport — the caller is
@@ -58,9 +57,6 @@ export async function buildServer(config: ServerConfig): Promise<BuiltServer> {
 
   const search = makeSearchDocsTool(registry, config.defaultEngine);
   server.registerTool(search.name, search.config, search.handler);
-
-  const outline = makeOutlineTool(docs);
-  server.registerTool(outline.name, outline.config, outline.handler);
 
   if (config.sourceRoots.length > 0) {
     const readSource = makeReadSourceTool(config.sourceRoots);

@@ -3,7 +3,6 @@ import { loadDocs } from "../src/loader.js";
 import { EngineRegistry } from "../src/search/index.js";
 import { makeGetDocTool } from "../src/tools/getDoc.js";
 import { makeListDocsTool } from "../src/tools/listDocs.js";
-import { makeOutlineTool } from "../src/tools/outline.js";
 import { makeSearchDocsTool } from "../src/tools/searchDocs.js";
 import { EXAMPLE_DOCS_DIR } from "./helpers.js";
 
@@ -93,22 +92,5 @@ describe("search_agent_docs tool", () => {
 
     const sc = result.structuredContent as { engine: string };
     expect(sc.engine).toBe("text");
-  });
-});
-
-describe("outline_agent_docs tool", () => {
-  it("returns a tree containing both folders and leaves", async () => {
-    const loaded = await loadDocs(EXAMPLE_DOCS_DIR);
-    const tool = makeOutlineTool(loaded);
-    const result = await tool.handler();
-
-    expect(result.isError).toBeFalsy();
-    const sc = result.structuredContent as {
-      tree: Array<{ type: string }>;
-    };
-
-    const types = new Set(sc.tree.map((n) => n.type));
-    expect(types.has("folder")).toBe(true);
-    expect(types.has("doc")).toBe(true);
   });
 });

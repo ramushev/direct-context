@@ -211,7 +211,6 @@ Start the server (see [§3 Run the server](#3-run-the-server) for the full comma
 | `list_agent_docs`     | (none)                         | `{ count, docs: [{ id, title, kind, tags, path }] }`                 |
 | `get_agent_doc`       | `{ id }`                       | `{ id, title, kind, tags, path, code_refs, frontmatter, body }`      |
 | `search_agent_docs`   | `{ query, k?, engine? }`       | `{ engine, query, hits: [{ id, title, score, snippet }] }`           |
-| `outline_agent_docs`  | (none)                         | `{ tree: OutlineNode[] }`                                            |
 | `get_prompt`          | `{ id }`                       | `{ id, description, body, args, sources }`                           |
 | `list_source_roots`*  | (none)                         | `{ count, roots: [{ name }] }`                                       |
 | `read_source_file`*   | `{ repo, path, max_bytes? }`   | `{ repo, path, bytes, truncated, content }`                          |

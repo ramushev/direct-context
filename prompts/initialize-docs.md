@@ -102,10 +102,9 @@ ignored for the duration of this run.**
 
 **Ignored for this run (do NOT call against the open repo):**
 
-- `search_agent_docs`, `get_agent_doc`, `list_agent_docs`,
-  `outline_agent_docs` — they return whatever was last ingested by
-  `pnpm ctx:load`, by definition older than the code you're about to
-  re-describe.
+- `search_agent_docs`, `get_agent_doc`, `list_agent_docs` — they return
+  whatever was last ingested by `pnpm ctx:load`, by definition older than
+  the code you're about to re-describe.
 - `read_source_file`, `list_source_dir`, `list_source_roots` — read the code
   with the editor's native file tools (Read / Glob / Grep). They're faster
   and don't go through the MCP sandbox.
@@ -350,9 +349,8 @@ existing prompts dictate.
       are already resolved.
 
    Also available: `list_agent_docs` (every doc, no search),
-   `outline_agent_docs` (folder/file tree), `list_source_dir` (when a
-   `code_ref` points at a directory), `list_source_roots` (names of the
-   repos the server can read source from).
+   `list_source_dir` (when a `code_ref` points at a directory),
+   `list_source_roots` (names of the repos the server can read source from).
 
    **Fallback — read the files directly.** If the MCP tools aren't
    present, open the `*.md` files under `agent-docs/` yourself. The set
@@ -476,8 +474,8 @@ Read the repo's source code directly through native editor file tools
 (Read / Glob / Grep). Do NOT call the `direct-context` MCP server for any
 purpose:
 
-  - No `search_agent_docs`, `get_agent_doc`, `list_agent_docs`,
-    `outline_agent_docs` — they return last-ingested (stale) docs.
+  - No `search_agent_docs`, `get_agent_doc`, `list_agent_docs` — they
+    return last-ingested (stale) docs.
   - No `read_source_file` — use native Read instead.
   - No `get_prompt` — the phase spec above is the one and only source.
 

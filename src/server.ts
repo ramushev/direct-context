@@ -14,6 +14,7 @@ import {
   makeReadSourceTool,
 } from "./tools/readSource.js";
 import { makeSearchDocsTool } from "./tools/searchDocs.js";
+import { makeSearchSourceTool } from "./tools/searchSource.js";
 
 export interface BuiltServer {
   server: McpServer;
@@ -70,6 +71,13 @@ export async function buildServer(config: ServerConfig): Promise<BuiltServer> {
 
     const listDir = makeListDirectoryTool(config.sourceRoots);
     server.registerTool(listDir.name, listDir.config, listDir.handler);
+
+    const searchSource = makeSearchSourceTool(config.sourceRoots);
+    server.registerTool(
+      searchSource.name,
+      searchSource.config,
+      searchSource.handler,
+    );
   }
 
   const collectPrompts = await loadCollectPrompts(config.promptsDir);

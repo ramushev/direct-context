@@ -216,6 +216,7 @@ Start the server (see [§3 Run the server](#3-run-the-server) for the full comma
 | `list_source_roots`*  | (none)                         | `{ count, roots: [{ name }] }`                                       |
 | `read_source_file`*   | `{ repo, path, max_bytes? }`   | `{ repo, path, bytes, truncated, content }`                          |
 | `list_source_dir`*    | `{ repo, path }`               | `{ repo, path, entries: [{ name, path, type }] }`                    |
+| `search_source_files`*| `{ query, repo?, glob?, case_sensitive?, max_results?, max_file_bytes? }` | `{ query, repo, count, truncated, matches: [{ repo, path, line, text }] }` |
 
 \* Registered only when at least one source root is configured.
 

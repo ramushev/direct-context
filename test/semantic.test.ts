@@ -4,12 +4,9 @@ import { HybridEngine } from "../src/search/hybrid.js";
 import { SemanticEngine } from "../src/search/semantic.js";
 import { EXAMPLE_DOCS_DIR } from "./helpers.js";
 
-// The semantic engine downloads a ~100MB model on first run, so it is
-// gated behind an env var. Set CONTEXT_RUN_SEMANTIC_TESTS=1 to enable.
-const enabled = process.env.CONTEXT_RUN_SEMANTIC_TESTS === "1";
-const maybeDescribe = enabled ? describe : describe.skip;
-
-maybeDescribe("semantic engine", () => {
+// The semantic engine downloads a ~100MB model on first run; the model is
+// cached afterwards. The generous per-test timeout below covers that download.
+describe("semantic engine", () => {
   it(
     "ranks the auth module highest for a token-related query",
     async () => {
@@ -26,7 +23,7 @@ maybeDescribe("semantic engine", () => {
   );
 });
 
-maybeDescribe("hybrid engine", () => {
+describe("hybrid engine", () => {
   it(
     "fuses bm25 + semantic and surfaces the auth module for a token query",
     async () => {

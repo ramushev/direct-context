@@ -31,7 +31,11 @@ export const makeListDocsTool = (loaded: LoadedDocs) =>
     config: {
       title: "List agent docs",
       description:
-        "List every agent doc loaded by the server, with id, title, kind, tags and relative path.",
+        "Browse the full catalog of agent docs describing this repository — id, title, kind, tags and relative path " +
+        "for every loaded doc (takes no arguments). These docs are the server's map of the codebase, and every " +
+        "connected repo always has them (synthetic docs are generated when none were committed). For a targeted " +
+        "lookup prefer `search_agent_docs`. Intended loop: `search_agent_docs` / `list_agent_docs` → " +
+        "`get_agent_doc` (returns `code_refs`) → `read_source_file` (when source roots are configured).",
       inputSchema: {},
     },
     handler: async () => jsonResult(buildListDocsResult(loaded)),

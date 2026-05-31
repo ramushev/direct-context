@@ -16,9 +16,11 @@ export const makeGetPromptTool = (prompts: CollectPrompt[]) =>
     config: {
       title: "Get collect prompt",
       description:
-        "Return the full body and metadata of a documentation collect prompt by its id " +
-        "(e.g. '01-architecture'). Use this to fetch the authoritative spec for a phase " +
-        "before executing it.",
+        "Return the full body and metadata of a documentation collect prompt by its id (e.g. '01-architecture'). " +
+        "These prompts drive the doc-generation workflow (run end-to-end via 'initialize-docs') and are separate " +
+        "from the search/read loop. Prompt ids follow the registered prompt names ('00-orientation', " +
+        "'01-architecture', …, 'initialize-docs') and are also discoverable via the server's MCP prompts " +
+        "(prompts/list). Use this to fetch the authoritative spec for a phase before executing it.",
       inputSchema: {
         id: z.string().min(1).describe("The prompt id, e.g. '01-architecture'."),
       },

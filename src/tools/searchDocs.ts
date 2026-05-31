@@ -27,9 +27,13 @@ export const makeSearchDocsTool = (
     config: {
       title: "Search agent docs",
       description:
-        "Search the loaded agent docs using one of the available search engines (text, bm25, semantic, hybrid). " +
-        "Results are chunk-level: each hit carries the parent doc `id` plus the `startLine`/`endLine` of the matched region " +
-        "and a line-numbered snippet, so you can jump straight there with read_source_file.",
+        "Primary entry point. Searches this repository's agent docs — the server's pre-built map of the codebase — " +
+        "and returns the most relevant regions. Results are chunk-level: each hit carries the parent doc `id`, the " +
+        "`startLine`/`endLine` of the matched region, a line-numbered snippet, and a relevance `score`. " +
+        "To act on a hit, open its doc region with `get_agent_doc({ id })` to read the full doc and its `code_refs`, then " +
+        "`read_source_file({ repo, path })` to open the cited source (when source roots are configured). " +
+        "Every connected repo always has docs — synthetic ones are generated when none were committed — so a query always returns something. " +
+        "Pick an engine with the `engine` arg (defaults to the server's configured default).",
       inputSchema: {
         query: z.string().min(1).describe("Free-text search query."),
         k: z

@@ -49,7 +49,8 @@ export const makeGetDocTool = (loaded: LoadedDocs) =>
     config: {
       title: "Get agent doc",
       description:
-        "Return a single agent doc (frontmatter + body) by its id. Use list_agent_docs to discover ids. " +
+        "Return a single agent doc (frontmatter + body) by its id — the middle step of the search → get → read loop. " +
+        "Discover ids with `search_agent_docs` (preferred) or `list_agent_docs`. " +
         "The `code_refs` field is a typed list of `{ repo, path, ref?, description? }` pointers to source " +
         "files the doc cites — pass entries straight to `read_source_file` to inspect the underlying code.",
       inputSchema: {

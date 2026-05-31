@@ -190,7 +190,8 @@ export const makeSearchSourceTool = (roots: readonly SourceRoot[]) =>
       title: "Search source files",
       description:
         "Grep the configured source-code roots for a regular expression and return matching files with line numbers. " +
-        "Use this to locate where a symbol, string, or pattern lives before reading the file with read_source_file. " +
+        "This is raw code search — reach for it when you need source the agent docs don't cover; otherwise start with " +
+        "`search_agent_docs`. Use it to locate where a symbol, string, or pattern lives before reading the file with read_source_file. " +
         "Pass `repo` to scope the search to one root (otherwise all configured roots are searched), and `glob` to " +
         "restrict which files are scanned (e.g. '**/*.ts'). Binary files, oversized files, and common build/vendor " +
         "directories (node_modules, .git, dist, …) are skipped. Each match's `path` is relative to its source root " +

@@ -86,7 +86,8 @@ export const makeReadSourceTool = (roots: readonly SourceRoot[]) =>
     config: {
       title: "Read source file",
       description:
-        "Read a file from a configured source-code root. Use this after consulting agent docs to look at the real implementation. " +
+        "Read a file from a configured source-code root — the final step of the search → get → read loop. " +
+        "Use this after consulting agent docs to look at the real implementation. " +
         "Paths are resolved relative to the named --source-root and rejected if they escape it. " +
         "Agent docs produced by the built-in collect prompts carry a `code_refs:` frontmatter block listing " +
         "`{ repo, path }` entries that can be passed directly to this tool.",

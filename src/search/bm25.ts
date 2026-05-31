@@ -35,7 +35,12 @@ export class Bm25Engine implements SearchEngine {
         boost: { title: 3, tags: 2, text: 1 },
         prefix: true,
         fuzzy: 0.2,
-        combineWith: "AND",
+        // OR (MiniSearch's default) so natural-language queries still match.
+        // AND requires every term — including stopwords like "how"/"does" — to
+        // co-occur in one chunk, which returns nothing for conversational
+        // phrasings. IDF down-weights common terms and chunks matching more
+        // query terms rank higher, so precision holds without AND.
+        combineWith: "OR",
       },
     });
 

@@ -83,7 +83,6 @@ describe("loadSyntheticRepoDocs", () => {
     // Raw source files are not surfaced as searchable docs — only synthesized
     // structure docs are returned; source files are reached via read_source_file.
     expect(byId.has("src/server.ts")).toBe(false);
-    expect(docs.some((d) => d.kind === "source")).toBe(false);
 
     // Synthesized docs only; never more than 5 of them.
     expect(docs[0]?.id).toBe("overview");
@@ -143,7 +142,6 @@ describe("loadSyntheticRepoDocs", () => {
     // Only synthesized docs are returned, regenerated from the source — the
     // agent-docs/ written on the first run is never picked up as input.
     expect(second.some((d) => d.id === "overview")).toBe(true);
-    expect(second.some((d) => d.kind === "source")).toBe(false);
     expect(second.some((d) => d.id.startsWith("agent-docs/"))).toBe(false);
   });
 });
@@ -164,16 +162,15 @@ describe("indexSourceDocs", () => {
     await writeFile(path.join(dir, "src/server.ts"), "export const port = 3050;");
     await writeFile(path.join(dir, "README.md"), "# Hello\n");
     // A committed, curated docs folder (authored mode) — must stay out of the
-    // source index so it isn't double-indexed as kind: source.
+    // source index so it isn't double-read as a source file.
     await mkdir(path.join(dir, "agent-docs"), { recursive: true });
     await writeFile(path.join(dir, "agent-docs/overview.md"), "# Overview\n");
 
-    const docs = await indexSourceDocs(dir, "authored-repo");
-    const ids = docs.map((d) => d.id).sort();
+    const files = await indexSourceDocs(dir);
+    const paths = files.map((f) => f.relPath).sort();
 
-    expect(ids).toEqual(["README.md", "src/server.ts"]);
-    expect(docs.every((d) => d.kind === "source")).toBe(true);
-    expect(docs.some((d) => d.relPath.startsWith("agent-docs/"))).toBe(false);
+    expect(paths).toEqual(["README.md", "src/server.ts"]);
+    expect(paths.some((p) => p.startsWith("agent-docs/"))).toBe(false);
   });
 
   it("indexes text/code files and skips binary, oversized, and lockfile entries", async () => {
@@ -184,9 +181,9 @@ describe("indexSourceDocs", () => {
     await writeFile(path.join(dir, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     await writeFile(path.join(dir, "big.txt"), "x".repeat(600 * 1024));
 
-    const docs = await indexSourceDocs(dir, "my-repo");
-    const ids = docs.map((d) => d.id).sort();
-    expect(ids).toEqual(["README.md", "src/server.ts"]);
+    const files = await indexSourceDocs(dir);
+    const paths = files.map((f) => f.relPath).sort();
+    expect(paths).toEqual(["README.md", "src/server.ts"]);
   });
 
   it("respects .gitignore via git ls-files when the checkout is a git repo", async () => {
@@ -196,10 +193,10 @@ describe("indexSourceDocs", () => {
     await writeFile(path.join(dir, ".gitignore"), "secret.ts\n");
     await execFile("git", ["add", "keep.ts", ".gitignore"], { cwd: dir });
 
-    const docs = await indexSourceDocs(dir, "git-repo");
-    const ids = docs.map((d) => d.id);
-    expect(ids).toContain("keep.ts");
-    expect(ids).not.toContain("secret.ts");
+    const files = await indexSourceDocs(dir);
+    const paths = files.map((f) => f.relPath);
+    expect(paths).toContain("keep.ts");
+    expect(paths).not.toContain("secret.ts");
   });
 });
 

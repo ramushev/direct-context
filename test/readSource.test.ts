@@ -15,6 +15,11 @@ describe("readSourceFile", () => {
     await writeFile(path.join(root, "src", "hello.ts"), 'export const x = 1;\n');
     await writeFile(path.join(root, "small.txt"), "ok\n");
     await writeFile(path.join(root, "big.txt"), "x".repeat(2048));
+    await mkdir(path.join(root, ".git"), { recursive: true });
+    await writeFile(
+      path.join(root, ".git", "config"),
+      "[remote \"origin\"]\n\turl = https://x:token@example.com/r.git\n",
+    );
     roots = [{ name: path.basename(root), path: root }];
   });
 
@@ -85,6 +90,12 @@ describe("readSourceFile", () => {
       readSourceFile(roots, { repo: roots[0]!.name, path: "src" }),
     ).rejects.toThrow(/not a regular file/);
   });
+
+  it("refuses to read inside a protected dir (.git) so secrets can't leak", async () => {
+    await expect(
+      readSourceFile(roots, { repo: roots[0]!.name, path: ".git/config" }),
+    ).rejects.toThrow(/protected directory/);
+  });
 });
 
 describe("listDirectory", () => {
@@ -97,6 +108,8 @@ describe("listDirectory", () => {
     await writeFile(path.join(root, "src", "index.ts"), "");
     await writeFile(path.join(root, "src", "pages", "Home.tsx"), "");
     await writeFile(path.join(root, "src", "pages", "About.tsx"), "");
+    await mkdir(path.join(root, ".git"), { recursive: true });
+    await writeFile(path.join(root, ".git", "config"), "[core]\n");
     roots = [{ name: path.basename(root), path: root }];
   });
 
@@ -150,5 +163,14 @@ describe("listDirectory", () => {
     await expect(
       listDirectory(roots, { repo: "nonexistent", path: "src" }),
     ).rejects.toThrow(/Unknown source root/);
+  });
+
+  it("refuses to list a protected dir and hides it from the root listing", async () => {
+    await expect(
+      listDirectory(roots, { repo: roots[0]!.name, path: ".git" }),
+    ).rejects.toThrow(/protected directory/);
+
+    const top = await listDirectory(roots, { repo: roots[0]!.name, path: "." });
+    expect(top.entries.some((e) => e.name === ".git")).toBe(false);
   });
 });

@@ -230,12 +230,6 @@ async function walkFiles(repoRoot: string): Promise<string[]> {
   return results;
 }
 
-/** Maps a file extension to a coarse language tag for filtering. */
-const langTag = (rel: string): string | null => {
-  const ext = path.extname(rel).toLowerCase().replace(/^\./, "");
-  return ext.length > 0 ? ext : null;
-};
-
 // ---------------------------------------------------------------------------
 // Materialize: copy a local repo into the cache
 // ---------------------------------------------------------------------------
@@ -358,6 +352,18 @@ interface SynthDoc {
   kind: LoadedDoc["kind"];
   tags: string[];
   codeRefs: CodeRef[];
+  body: string;
+}
+
+/**
+ * A repo source file read for synthesis — only the fields the builders use.
+ * Raw source is never served as a searchable doc (agents reach it via
+ * `read_source_file`), so there's no need to model it as a full `LoadedDoc`.
+ */
+export interface SourceFile {
+  /** Repo-relative POSIX path, e.g. `src/server.ts`. */
+  relPath: string;
+  /** Full file contents. */
   body: string;
 }
 
@@ -582,7 +588,7 @@ const tagsFor = (kind: string, repoName: string): string[] => [
 function buildOverview(
   repoName: string,
   pkg: PackageJson | null,
-  sourceDocs: readonly LoadedDoc[],
+  sourceDocs: readonly SourceFile[],
 ): SynthDoc {
   const relPaths = sourceDocs.map((d) => d.relPath);
   const langs = languageBreakdown(relPaths)
@@ -670,7 +676,7 @@ function buildOverview(
 function buildArchitecture(
   repoName: string,
   pkg: PackageJson | null,
-  sourceDocs: readonly LoadedDoc[],
+  sourceDocs: readonly SourceFile[],
 ): SynthDoc {
   const relPaths = sourceDocs.map((d) => d.relPath);
 
@@ -743,9 +749,9 @@ function buildArchitecture(
  */
 function buildModules(
   repoName: string,
-  sourceDocs: readonly LoadedDoc[],
+  sourceDocs: readonly SourceFile[],
 ): SynthDoc | null {
-  const byArea = new Map<string, LoadedDoc[]>();
+  const byArea = new Map<string, SourceFile[]>();
   for (const doc of sourceDocs) {
     const seg = topSegment(doc.relPath);
     if (!seg) continue; // root-level loose files: covered by overview/architecture
@@ -799,7 +805,7 @@ function buildModules(
 function buildProjectDetails(
   repoName: string,
   pkg: PackageJson | null,
-  sourceDocs: readonly LoadedDoc[],
+  sourceDocs: readonly SourceFile[],
 ): SynthDoc | null {
   const relPaths = sourceDocs.map((d) => d.relPath);
   const has = (re: RegExp): boolean => relPaths.some((p) => re.test(p));
@@ -946,62 +952,41 @@ async function persist(synth: SynthDoc, outDir: string): Promise<LoadedDoc> {
 // ---------------------------------------------------------------------------
 
 /**
- * Builds searchable docs straight from a repo's source files. Each indexable
- * file becomes one `LoadedDoc` whose body is the file's contents and which
- * carries a self `code_ref` so an agent can pull the full file via
- * `read_source_file`. File selection prefers `git ls-files` (tracked, honoring
- * `.gitignore`) and falls back to a filtered walk; binary/oversized/lockfile
- * entries are skipped regardless.
+ * Reads a repo's indexable source files into memory to drive synthesis. Each
+ * file becomes a `{ relPath, body }` pair — raw source is never served as a
+ * searchable doc (agents reach it via `read_source_file`), so there's no need
+ * to model it as a full `LoadedDoc`. File selection prefers `git ls-files`
+ * (tracked, honoring `.gitignore`) and falls back to a filtered walk;
+ * binary/oversized/lockfile entries are skipped regardless.
  */
 export async function indexSourceDocs(
   checkoutDir: string,
-  repoName: string,
-): Promise<LoadedDoc[]> {
+): Promise<SourceFile[]> {
   const all = await listCheckoutFiles(checkoutDir);
-  // Never index files under `agent-docs/`: in synthetic mode that folder is freshly
-  // synthesized (and already removed before this runs); in authored mode it
-  // holds the curated docs, which are loaded separately and must not be
-  // duplicated here as `kind: source`. The git `ls-files` path returns tracked
-  // `agent-docs/` files, so this filter — not SKIP_DIRS — is what excludes them.
+  // Never read files under `agent-docs/`: in synthetic mode that folder is
+  // freshly synthesized (and already removed before this runs); in authored
+  // mode it holds the curated docs, which are loaded separately. The git
+  // `ls-files` path returns tracked `agent-docs/` files, so this filter — not
+  // SKIP_DIRS — is what excludes them.
   const docsPrefix = `${AGENT_DOCS_FOLDER}/`;
   const candidates = all
     .filter((rel) => !rel.startsWith(docsPrefix))
     .filter(isIndexable)
     .sort();
 
-  const docs: LoadedDoc[] = [];
+  const files: SourceFile[] = [];
   for (const rel of candidates) {
     const absPath = path.join(checkoutDir, rel);
-
-    let body: string;
     try {
       const s = await stat(absPath);
       if (!s.isFile() || s.size > RAW_MAX_FILE_BYTES) continue;
-      body = await readFile(absPath, "utf8");
+      files.push({ relPath: rel, body: await readFile(absPath, "utf8") });
     } catch {
       continue;
     }
-
-    const tags = ["synthetic"];
-    const lang = langTag(rel);
-    if (lang) tags.push(lang);
-
-    docs.push({
-      id: rel,
-      title: rel,
-      kind: "source",
-      tags,
-      sources: [],
-      codeRefs: [{ repo: repoName, path: rel }],
-      absPath,
-      relPath: rel,
-      body,
-      raw: body,
-      extra: {},
-    });
   }
 
-  return docs;
+  return files;
 }
 
 // ---------------------------------------------------------------------------
@@ -1028,7 +1013,7 @@ export async function loadSyntheticRepoDocs(
   const outDir = path.join(checkoutDir, AGENT_DOCS_FOLDER);
   await rm(outDir, { recursive: true, force: true });
 
-  const sourceDocs = await indexSourceDocs(checkoutDir, repoName);
+  const sourceDocs = await indexSourceDocs(checkoutDir);
   if (sourceDocs.length === 0) return [];
 
   await mkdir(outDir, { recursive: true });

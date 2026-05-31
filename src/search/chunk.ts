@@ -38,8 +38,9 @@ const CODE_DEF =
 
 const MD_HEADING = /^#{1,6}\s/;
 
-const isMarkdown = (doc: LoadedDoc): boolean =>
-  /\.mdx?$/i.test(doc.id) || doc.kind !== "source";
+// Use markdown heading boundaries for `.md`/`.mdx` files (all served docs are
+// markdown) and the code-aware boundaries for anything else.
+const isMarkdown = (doc: LoadedDoc): boolean => /\.mdx?$/i.test(doc.relPath);
 
 function findBoundaries(lines: readonly string[], markdown: boolean): number[] {
   const bounds = new Set<number>([0]);

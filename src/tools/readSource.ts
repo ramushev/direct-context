@@ -6,6 +6,18 @@ import { errorResult, jsonResult } from "./util.js";
 
 const MAX_BYTES_DEFAULT = 256 * 1024;
 
+/**
+ * Directory names `read_source_file` / `list_source_dir` must never step into.
+ * VCS metadata can hold credentials — e.g. a remote URL with an embedded token
+ * in `.git/config` — plus the packed object store, so any path that traverses
+ * one is refused. (`search_source_files` already skips these via its own
+ * ignore-list.)
+ */
+const PROTECTED_DIRS: ReadonlySet<string> = new Set([".git", ".hg", ".svn"]);
+
+const hasProtectedSegment = (relFromRoot: string): boolean =>
+  relFromRoot.split(path.sep).some((seg) => PROTECTED_DIRS.has(seg));
+
 export interface ReadSourceInput {
   repo: string;
   path: string;
@@ -33,6 +45,11 @@ async function resolveUnderRoot(rootAbs: string, rel: string): Promise<string> {
   if (realJoined !== realRoot && !realJoined.startsWith(withSep)) {
     throw new Error(
       `Path "${rel}" resolves outside the configured source root.`,
+    );
+  }
+  if (hasProtectedSegment(path.relative(realRoot, realJoined))) {
+    throw new Error(
+      `Path "${rel}" is inside a protected directory (${[...PROTECTED_DIRS].join(", ")}) and cannot be accessed.`,
     );
   }
   return realJoined;
@@ -172,6 +189,8 @@ export async function listDirectory(
 
   const entries: DirEntry[] = [];
   for (const entry of raw) {
+    // Keep protected dirs out of the listing too, so they can't be discovered.
+    if (PROTECTED_DIRS.has(entry.name)) continue;
     const entryPath = path.join(input.path, entry.name);
     if (entry.isDirectory()) {
       entries.push({ name: entry.name, path: entryPath, type: "dir" });

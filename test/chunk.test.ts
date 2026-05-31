@@ -9,7 +9,7 @@ import {
 const mkDoc = (over: Partial<LoadedDoc> & { body: string }): LoadedDoc => ({
   id: "x.ts",
   title: "x.ts",
-  kind: "source",
+  kind: "note",
   tags: [],
   sources: [],
   codeRefs: [],
@@ -51,6 +51,7 @@ describe("chunkDoc", () => {
     const sec = (h: string) => `## ${h}\n${"prose line\n".repeat(25)}`;
     const doc = mkDoc({
       id: "guide.md",
+      relPath: "guide.md",
       kind: "note",
       body: `# Title\n${sec("Auth")}${sec("Billing")}`,
     });

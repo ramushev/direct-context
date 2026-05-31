@@ -11,7 +11,6 @@ export const DOC_KINDS = [
   "api",
   "glossary",
   "note",
-  "source",
   "project-details",
   "business-logic",
   "data-model",

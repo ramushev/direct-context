@@ -15,20 +15,40 @@ const chunkKey = (h: SearchHit): string =>
  * two engines. RRF needs no score normalization between the engines, which
  * matters here because BM25 and cosine scores aren't comparable.
  *
- * Note: this pulls in the semantic engine, so the first query downloads the
- * embedding model (same one-time cost as selecting `semantic` directly).
+ * The semantic half downloads an embedding model on first init. If that fails
+ * (e.g. an offline first run), the engine logs a warning and degrades to
+ * BM25-only rather than taking the whole search down with it.
  */
 export class HybridEngine implements SearchEngine {
   readonly name = "hybrid" as const;
-  private readonly bm25 = new Bm25Engine();
-  private readonly semantic = new SemanticEngine();
+  private semanticReady = false;
+
+  constructor(
+    private readonly bm25: SearchEngine = new Bm25Engine(),
+    private readonly semantic: SearchEngine = new SemanticEngine(),
+  ) {}
 
   async init(docs: readonly LoadedDoc[]): Promise<void> {
-    await Promise.all([this.bm25.init(docs), this.semantic.init(docs)]);
+    // BM25 must succeed — a failure here is a real error worth surfacing.
+    await this.bm25.init(docs);
+    // Semantic is best-effort: its model download can fail offline. Degrade to
+    // BM25-only instead of rejecting the whole hybrid engine.
+    try {
+      await this.semantic.init(docs);
+      this.semanticReady = true;
+    } catch (err) {
+      this.semanticReady = false;
+      process.stderr.write(
+        "[direct-context-mcp] hybrid: semantic engine unavailable, " +
+          `falling back to BM25-only — ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
   }
 
   async query(q: string, k: number): Promise<SearchHit[]> {
     if (q.trim().length === 0) return [];
+    // No semantic vectors → keyword-only; still useful, just not fused.
+    if (!this.semanticReady) return this.bm25.query(q, k);
 
     // Pull a deeper pool from each engine than we return, so fusion has room
     // to promote chunks that rank moderately in both over a one-sided top hit.

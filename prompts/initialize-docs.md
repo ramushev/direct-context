@@ -352,6 +352,16 @@ existing prompts dictate.
    `list_source_dir` (when a `code_ref` points at a directory),
    `list_source_roots` (names of the repos the server can read source from).
 
+   **Exception — the currently-open repo.** The rule above is for the
+   *other* repos `direct-context` serves (dependencies, siblings) that
+   you don't have checked out. For **this** repo — the one this
+   `AGENTS.md` lives in — read its own source and `agent-docs/` directly
+   with native file tools. `direct-context` only exposes a
+   `pnpm ctx:load` snapshot of it, which lags the working tree, so its
+   answers about this repo can be stale. Treat the working tree as
+   authoritative for the open repo; use the MCP tools for everything
+   you can't see locally.
+
    **Fallback — read the files directly.** If the MCP tools aren't
    present, open the `*.md` files under `agent-docs/` yourself. The set
    is laid out as an Obsidian vault — `[[wiki-links]]` between docs work

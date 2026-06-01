@@ -1,6 +1,6 @@
 # Direct Context
 
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/e07ebf0d-9268-4e0b-b0b7-cc451000efb6" />
+<img width="1536" height="1024" alt="image" src="assets/preview.png" />
 
 *An MCP server that turns any repository into searchable agent context.*
 

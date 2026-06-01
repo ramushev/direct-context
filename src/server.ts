@@ -30,7 +30,9 @@ const sanitizePromptName = (name: string): string =>
  * - Loads the agent docs from disk.
  * - Constructs the engine registry but does not eagerly initialize engines;
  *   an engine is initialized the first time it is queried.
- * - Registers three tools: list/get/search.
+ * - Registers the doc tools (list/get/search) and the source tools
+ *   (read/list-dir/list-roots/search) — source tools are always exposed and
+ *   report a clear error when no source roots are configured.
  * - Registers every prompt under the prompts directory.
  *
  * The returned `server` is not yet connected to a transport — the caller is
@@ -58,23 +60,24 @@ export async function buildServer(config: ServerConfig): Promise<BuiltServer> {
   const search = makeSearchDocsTool(registry, config.defaultEngine);
   server.registerTool(search.name, search.config, search.handler);
 
-  if (config.sourceRoots.length > 0) {
-    const readSource = makeReadSourceTool(config.sourceRoots);
-    server.registerTool(readSource.name, readSource.config, readSource.handler);
+  // Source tools are always registered. With no source roots configured each
+  // handler returns a clear "No source roots configured" message rather than
+  // silently disappearing from the tool list.
+  const readSource = makeReadSourceTool(config.sourceRoots);
+  server.registerTool(readSource.name, readSource.config, readSource.handler);
 
-    const listRoots = makeListSourceRootsTool(config.sourceRoots);
-    server.registerTool(listRoots.name, listRoots.config, listRoots.handler);
+  const listRoots = makeListSourceRootsTool(config.sourceRoots);
+  server.registerTool(listRoots.name, listRoots.config, listRoots.handler);
 
-    const listDir = makeListDirectoryTool(config.sourceRoots);
-    server.registerTool(listDir.name, listDir.config, listDir.handler);
+  const listDir = makeListDirectoryTool(config.sourceRoots);
+  server.registerTool(listDir.name, listDir.config, listDir.handler);
 
-    const searchSource = makeSearchSourceTool(config.sourceRoots);
-    server.registerTool(
-      searchSource.name,
-      searchSource.config,
-      searchSource.handler,
-    );
-  }
+  const searchSource = makeSearchSourceTool(config.sourceRoots);
+  server.registerTool(
+    searchSource.name,
+    searchSource.config,
+    searchSource.handler,
+  );
 
   const collectPrompts = await loadCollectPrompts(config.promptsDir);
 

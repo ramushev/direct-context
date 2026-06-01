@@ -175,12 +175,10 @@ Start the server (see [§3 Run the server](#3-run-the-server) for the full comma
 | `get_agent_doc`       | `{ id }`                       | `{ id, title, kind, tags, path, code_refs, frontmatter, body }`      |
 | `search_agent_docs`   | `{ query, k?, engine? }`       | `{ engine, query, hits: [{ id, title, score, snippet }] }`           |
 | `get_prompt`          | `{ id }`                       | `{ id, description, body, args, sources }`                           |
-| `list_source_roots`*  | (none)                         | `{ count, roots: [{ name }] }`                                       |
-| `read_source_file`*   | `{ repo, path, max_bytes? }`   | `{ repo, path, bytes, truncated, content }`                          |
-| `list_source_dir`*    | `{ repo, path }`               | `{ repo, path, entries: [{ name, path, type }] }`                    |
-| `search_source_files`*| `{ query, repo?, glob?, case_sensitive?, max_results?, max_file_bytes? }` | `{ query, repo, count, truncated, matches: [{ repo, path, line, text }] }` |
-
-\* Registered only when at least one source root is configured.
+| `list_source_roots`   | (none)                         | `{ count, roots: [{ name }] }`                                       |
+| `read_source_file`    | `{ repo, path, max_bytes? }`   | `{ repo, path, bytes, truncated, content }`                          |
+| `list_source_dir`     | `{ repo, path }`               | `{ repo, path, entries: [{ name, path, type }] }`                    |
+| `search_source_files` | `{ query, repo?, glob?, case_sensitive?, max_results?, max_file_bytes? }` | `{ query, repo, count, truncated, matches: [{ repo, path, line, text }] }` |
 
 The `engine` argument on `search_agent_docs` lets a single running server compare engines live — useful for picking the right default.
 

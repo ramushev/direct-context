@@ -1,6 +1,6 @@
 # Direct Context
 
-<img width="1536" height="1024" alt="image" src="assets/flow-preview.png" />
+<img width="1536" height="1024" alt="image" src="assets/preview.png" />
 
 *An MCP server that turns any repository into searchable agent context.*
 

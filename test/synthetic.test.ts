@@ -113,6 +113,65 @@ describe("loadSyntheticRepoDocs", () => {
     expect(mod?.body).toContain("`Engine`");
   });
 
+  it("populates overview + project-details for a Python repo (pyproject, no package.json)", async () => {
+    await mkdir(path.join(dir, "src"), { recursive: true });
+    await writeFile(
+      path.join(dir, "pyproject.toml"),
+      [
+        "[project]",
+        'name = "pytool"',
+        'version = "3.1.4"',
+        'description = "A python tool."',
+        'dependencies = ["requests", "click"]',
+        "",
+        "[project.optional-dependencies]",
+        'test = ["pytest"]',
+      ].join("\n"),
+    );
+    await writeFile(path.join(dir, "src/app.py"), "def main():\n    pass\n");
+
+    const docs = await loadSyntheticRepoDocs(dir, "pytool");
+    const byId = new Map(docs.map((d) => [d.id, d]));
+
+    const overview = byId.get("overview");
+    expect(overview?.title).toBe("pytool"); // name from pyproject, not repo name
+    expect(overview?.body).toContain("A python tool.");
+    expect(overview?.body).toContain("3.1.4");
+    expect(overview?.body).toContain("requests, click"); // python runtime deps
+    expect(overview?.body).toContain("`pyproject.toml` (python)"); // detected manifests
+
+    const details = byId.get("project-details");
+    expect(details?.body).toContain("pytest"); // test runner + build hint
+    expect(details?.body).toContain("pip install -e .");
+  });
+
+  it("merges manifests for a polyglot repo (package.json + pyproject.toml)", async () => {
+    await writeFile(
+      path.join(dir, "package.json"),
+      JSON.stringify({
+        name: "frontend",
+        dependencies: { react: "^18" },
+        scripts: { build: "vite build" },
+      }),
+    );
+    await writeFile(
+      path.join(dir, "pyproject.toml"),
+      '[project]\nname = "backend"\ndependencies = ["fastapi"]\n',
+    );
+    await mkdir(path.join(dir, "src"), { recursive: true });
+    await writeFile(path.join(dir, "src/index.ts"), "export const x = 1;");
+
+    const docs = await loadSyntheticRepoDocs(dir, "poly");
+    const overview = docs.find((d) => d.id === "overview");
+
+    // node wins the title (higher ecosystem priority), but both manifests show.
+    expect(overview?.title).toBe("frontend");
+    expect(overview?.body).toContain("`package.json` (node)");
+    expect(overview?.body).toContain("`pyproject.toml` (python)");
+    expect(overview?.body).toContain("node — runtime:** react");
+    expect(overview?.body).toContain("python — runtime:** fastapi");
+  });
+
   it("works without a package.json (overview falls back to the repo name)", async () => {
     await mkdir(path.join(dir, "lib"), { recursive: true });
     await writeFile(path.join(dir, "lib/util.py"), "def helper():\n    pass\n");

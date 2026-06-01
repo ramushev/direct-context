@@ -98,10 +98,12 @@ The merged `.cache/ctx.yaml` lists every doc across all repos (`id`, `kind`, `ta
 
 **Synthetic mode (no committed `agent-docs/`).** When a repo has no committed `agent-docs/`, `ctx:load` falls back to synthetic mode instead of erroring — no LLM required. From the repo's own metadata and layout (file selection via `git ls-files`, skipping binary/oversized/lockfile entries), it synthesizes a compact map (≤5 files) into the cached checkout's `agent-docs/`:
 
-- `overview` — `package.json` summary, README excerpt + TOC, language stats, entry points.
+- `overview` — project metadata (name, version, description, dependencies, scripts, entry points) from every detected manifest, plus README excerpt + TOC and language stats.
 - `architecture` — directory tree, top-level areas, entry/key files.
 - `modules` — one consolidated map of each area's files and regex-extracted exported symbols (TS/JS, Python, Go, Rust, Java/Kotlin, Ruby, C#, PHP, Swift, C/C++, Scala).
 - `project-details` — build/test/run commands, config, CI/deploy signals (when present).
+
+Manifest metadata is read from each ecosystem's project file — `package.json`, `composer.json`, `pyproject.toml` (PEP 621 + Poetry), `Cargo.toml`, `setup.cfg`, `setup.py`, `requirements.txt`, `go.mod`, `Gemfile`/`*.gemspec`, `build.gradle`, `pom.xml`, `*.csproj` — so non-JS repos get a populated overview, not just a file count. Polyglot repos detect and **merge** every manifest found at the repo root.
 
 These are tagged `synthetic` and regenerated every load, and live only in the cache — a committed or AI-authored `agent-docs/` is never clobbered. Source files aren't indexed directly; agents reach them via `read_source_file` following each doc's `code_refs`. Mix freely — some repos with full `agent-docs/`, some synthetic; the orchestrator (§1) is the upgrade path.
 

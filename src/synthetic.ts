@@ -12,6 +12,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import type { CodeRef, LoadedDoc } from "./loader.js";
+import { detectManifests, type ProjectManifest } from "./manifests.js";
 
 const execFile = promisify(execFileCb);
 
@@ -207,7 +208,7 @@ async function gitTrackedFiles(repoRoot: string): Promise<string[] | null> {
  * resolves to the parent repo and returns nothing — the walk is what we want.
  * Remote clones have their own `.git`, so they keep using their tracked set.
  */
-async function listCheckoutFiles(repoRoot: string): Promise<string[]> {
+export async function listCheckoutFiles(repoRoot: string): Promise<string[]> {
   const tracked = await gitTrackedFiles(repoRoot);
   return tracked && tracked.length > 0 ? tracked : await walkFiles(repoRoot);
 }
@@ -365,30 +366,6 @@ export interface SourceFile {
   relPath: string;
   /** Full file contents. */
   body: string;
-}
-
-interface PackageJson {
-  name?: string;
-  version?: string;
-  description?: string;
-  main?: string;
-  bin?: string | Record<string, string>;
-  scripts?: Record<string, string>;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-}
-
-/** Reads and parses `package.json` at the repo root, or null if absent/invalid. */
-async function readPackageJson(repoRoot: string): Promise<PackageJson | null> {
-  try {
-    const text = await readFile(path.join(repoRoot, "package.json"), "utf8");
-    const parsed = JSON.parse(text) as unknown;
-    return parsed && typeof parsed === "object"
-      ? (parsed as PackageJson)
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 /** Counts indexed files by extension, e.g. `{ ts: 40, md: 8 }`, biggest first. */
@@ -549,17 +526,15 @@ function directoryTree(relPaths: readonly string[]): string {
   return lines.length > 0 ? lines.join("\n") : "(no directories)";
 }
 
-/** Resolves package.json `main`/`bin` into code_refs. */
-function entryPointRefs(pkg: PackageJson | null): CodeRef[] {
+/** Merges entry points across all manifests, de-duped by path (first wins). */
+function entryPointRefs(manifests: readonly ProjectManifest[]): CodeRef[] {
+  const seen = new Set<string>();
   const refs: CodeRef[] = [];
-  if (!pkg) return refs;
-  if (typeof pkg.main === "string")
-    refs.push({ path: pkg.main, description: "main" });
-  if (typeof pkg.bin === "string") {
-    refs.push({ path: pkg.bin, description: "bin" });
-  } else if (pkg.bin && typeof pkg.bin === "object") {
-    for (const [name, p] of Object.entries(pkg.bin)) {
-      refs.push({ path: p, description: `bin: ${name}` });
+  for (const m of manifests) {
+    for (const ep of m.entryPoints) {
+      if (seen.has(ep.path)) continue;
+      seen.add(ep.path);
+      refs.push(ep);
     }
   }
   return refs;
@@ -584,10 +559,10 @@ const tagsFor = (kind: string, repoName: string): string[] => [
   repoName,
 ];
 
-/** Builds the `overview` doc from package.json, README, and language stats. */
+/** Builds the `overview` doc from detected manifests, README, and language stats. */
 function buildOverview(
   repoName: string,
-  pkg: PackageJson | null,
+  manifests: readonly ProjectManifest[],
   sourceDocs: readonly SourceFile[],
 ): SynthDoc {
   const relPaths = sourceDocs.map((d) => d.relPath);
@@ -596,38 +571,58 @@ function buildOverview(
     .map(([ext, n]) => `${ext} (${n})`)
     .join(", ");
 
-  const codeRefs: CodeRef[] = [];
+  // manifests arrive sorted by ecosystem priority, so the first with a name/
+  // description is the repo's primary one.
+  const title = manifests.find((m) => m.name)?.name ?? repoName;
+  const description = manifests.find((m) => m.description)?.description;
+  const version = manifests.find((m) => m.version)?.version;
+
+  const codeRefs: CodeRef[] = manifests.map((m) => ({
+    repo: repoName,
+    path: m.manifestFile,
+  }));
   const lines: string[] = [];
-  lines.push(`# ${pkg?.name ?? repoName}`, "");
-  if (pkg?.description) lines.push(pkg.description, "");
+  lines.push(`# ${title}`, "");
+  if (description) lines.push(description, "");
 
   lines.push("## At a glance", "");
-  if (pkg?.version) lines.push(`- **Version:** ${pkg.version}`);
+  if (version) lines.push(`- **Version:** ${version}`);
   lines.push(`- **Indexed files:** ${sourceDocs.length}`);
   if (langs) lines.push(`- **Languages:** ${langs}`);
 
-  const entryPoints = entryPointRefs(pkg);
+  const entryPoints = entryPointRefs(manifests);
   if (entryPoints.length > 0) {
     const uniq = [...new Set(entryPoints.map((r) => r.path))];
     lines.push(`- **Entry points:** ${uniq.map((p) => `\`${p}\``).join(", ")}`);
   }
+  if (manifests.length > 0) {
+    const list = manifests
+      .map((m) => `\`${m.manifestFile}\` (${m.ecosystem})`)
+      .join(", ");
+    lines.push(`- **Manifests:** ${list}`);
+  }
   lines.push("");
 
-  if (pkg) {
-    codeRefs.push({ repo: repoName, path: "package.json" });
-    const scripts = Object.entries(pkg.scripts ?? {});
-    if (scripts.length > 0) {
-      lines.push("## Scripts", "", "| Script | Command |", "| --- | --- |");
-      for (const [name, cmd] of scripts)
-        lines.push(`| \`${name}\` | \`${cmd}\` |`);
-      lines.push("");
-    }
-    const deps = Object.keys(pkg.dependencies ?? {});
-    const devDeps = Object.keys(pkg.devDependencies ?? {});
-    if (deps.length > 0 || devDeps.length > 0) {
-      lines.push("## Dependencies", "");
-      if (deps.length > 0) lines.push(`**Runtime:** ${deps.join(", ")}`, "");
-      if (devDeps.length > 0) lines.push(`**Dev:** ${devDeps.join(", ")}`, "");
+  // Scripts merged across every manifest that declares them.
+  const scripts = manifests.flatMap((m) => m.scripts);
+  if (scripts.length > 0) {
+    lines.push("## Scripts", "", "| Script | Command |", "| --- | --- |");
+    for (const { name, command } of scripts)
+      lines.push(`| \`${name}\` | \`${command}\` |`);
+    lines.push("");
+  }
+
+  // Dependencies grouped per manifest/ecosystem.
+  const withDeps = manifests.filter(
+    (m) => m.runtimeDeps.length > 0 || m.devDeps.length > 0,
+  );
+  if (withDeps.length > 0) {
+    lines.push("## Dependencies", "");
+    for (const m of withDeps) {
+      if (m.runtimeDeps.length > 0)
+        lines.push(`**${m.ecosystem} — runtime:** ${m.runtimeDeps.join(", ")}`, "");
+      if (m.devDeps.length > 0)
+        lines.push(`**${m.ecosystem} — dev:** ${m.devDeps.join(", ")}`, "");
     }
   }
 
@@ -664,7 +659,7 @@ function buildOverview(
   return {
     relName: "overview.md",
     id: "overview",
-    title: pkg?.name ?? repoName,
+    title,
     kind: "overview",
     tags: tagsFor("overview", repoName),
     codeRefs,
@@ -675,7 +670,7 @@ function buildOverview(
 /** Builds the `architecture` doc — directory tree + top-level area table + key files. */
 function buildArchitecture(
   repoName: string,
-  pkg: PackageJson | null,
+  manifests: readonly ProjectManifest[],
   sourceDocs: readonly SourceFile[],
 ): SynthDoc {
   const relPaths = sourceDocs.map((d) => d.relPath);
@@ -710,7 +705,7 @@ function buildArchitecture(
     "",
   );
 
-  const entryPoints = entryPointRefs(pkg);
+  const entryPoints = entryPointRefs(manifests);
   const keyFiles = keyFileRefs(relPaths);
   const allEntry = [...entryPoints, ...keyFiles];
   if (allEntry.length > 0) {
@@ -804,7 +799,7 @@ function buildModules(
  */
 function buildProjectDetails(
   repoName: string,
-  pkg: PackageJson | null,
+  manifests: readonly ProjectManifest[],
   sourceDocs: readonly SourceFile[],
 ): SynthDoc | null {
   const relPaths = sourceDocs.map((d) => d.relPath);
@@ -812,19 +807,22 @@ function buildProjectDetails(
   const refs: CodeRef[] = [];
   const sections: string[][] = [];
 
-  // Build / test / run commands.
-  const scripts = Object.entries(pkg?.scripts ?? {});
+  // Build / test / run commands — conventional named scripts (mostly npm) plus
+  // each ecosystem's default build/test hints, merged across all manifests.
   const cmdLines: string[] = [];
-  if (scripts.length > 0) {
+  for (const m of manifests) {
     for (const key of ["build", "test", "start", "dev", "lint", "typecheck"]) {
-      const cmd = pkg?.scripts?.[key];
-      if (cmd) cmdLines.push(`- \`${key}\`: \`${cmd}\``);
+      const script = m.scripts.find((s) => s.name === key);
+      if (script) cmdLines.push(`- \`${key}\`: \`${script.command}\``);
     }
+    for (const bc of m.buildCommands)
+      cmdLines.push(`- \`${bc.label}\`: \`${bc.command}\``);
   }
   if (has(/(^|\/)Makefile$/))
     cmdLines.push("- `Makefile` present — `make <target>`");
-  if (cmdLines.length > 0)
-    sections.push(["## Build & run", "", ...cmdLines, ""]);
+  const dedupedCmds = [...new Set(cmdLines)];
+  if (dedupedCmds.length > 0)
+    sections.push(["## Build & run", "", ...dedupedCmds, ""]);
 
   // Testing.
   const testDirs = [
@@ -837,17 +835,13 @@ function buildProjectDetails(
   const testFiles = relPaths.filter(
     (p) => /\.(test|spec)\.[a-z]+$/i.test(p) || /_test\.go$/i.test(p),
   );
-  const devDeps = Object.keys(pkg?.devDependencies ?? {});
-  const runner = [
-    "vitest",
-    "jest",
-    "mocha",
-    "ava",
-    "playwright",
-    "cypress",
-  ].find((r) => devDeps.includes(r));
+  const runners = [
+    ...new Set(
+      manifests.map((m) => m.testRunner).filter((r): r is string => Boolean(r)),
+    ),
+  ];
   const testLines: string[] = [];
-  if (runner) testLines.push(`- **Runner:** ${runner}`);
+  if (runners.length > 0) testLines.push(`- **Runner:** ${runners.join(", ")}`);
   if (testDirs.length > 0)
     testLines.push(
       `- **Test dirs:** ${testDirs.map((d) => `\`${d}/\``).join(", ")}`,
@@ -961,8 +955,9 @@ async function persist(synth: SynthDoc, outDir: string): Promise<LoadedDoc> {
  */
 export async function indexSourceDocs(
   checkoutDir: string,
+  fileList?: readonly string[],
 ): Promise<SourceFile[]> {
-  const all = await listCheckoutFiles(checkoutDir);
+  const all = fileList ?? (await listCheckoutFiles(checkoutDir));
   // Never read files under `agent-docs/`: in synthetic mode that folder is
   // freshly synthesized (and already removed before this runs); in authored
   // mode it holds the curated docs, which are loaded separately. The git
@@ -1013,19 +1008,23 @@ export async function loadSyntheticRepoDocs(
   const outDir = path.join(checkoutDir, AGENT_DOCS_FOLDER);
   await rm(outDir, { recursive: true, force: true });
 
-  const sourceDocs = await indexSourceDocs(checkoutDir);
+  // Compute the checkout listing once and reuse it for both source indexing and
+  // manifest detection (manifest detection needs the full list — e.g. `go.mod`
+  // isn't in the indexable-extension set).
+  const fileList = await listCheckoutFiles(checkoutDir);
+  const sourceDocs = await indexSourceDocs(checkoutDir, fileList);
   if (sourceDocs.length === 0) return [];
 
   await mkdir(outDir, { recursive: true });
 
-  const pkg = await readPackageJson(checkoutDir);
+  const manifests = await detectManifests(checkoutDir, fileList);
   const synth: SynthDoc[] = [
-    buildOverview(repoName, pkg, sourceDocs),
-    buildArchitecture(repoName, pkg, sourceDocs),
+    buildOverview(repoName, manifests, sourceDocs),
+    buildArchitecture(repoName, manifests, sourceDocs),
   ];
   const modules = buildModules(repoName, sourceDocs);
   if (modules) synth.push(modules);
-  const details = buildProjectDetails(repoName, pkg, sourceDocs);
+  const details = buildProjectDetails(repoName, manifests, sourceDocs);
   if (details) synth.push(details);
 
   const synthDocs = await Promise.all(synth.map((s) => persist(s, outDir)));

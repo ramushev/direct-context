@@ -1,5 +1,7 @@
 # Direct Context
 
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/e07ebf0d-9268-4e0b-b0b7-cc451000efb6" />
+
 *An MCP server that turns any repository into searchable agent context.*
 
 Point it at any repo and it works immediately — `direct-context` snapshots each repo into a local cache and serves it to agents over MCP. It's two things in one package:
